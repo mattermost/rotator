@@ -265,57 +265,6 @@ func (ps podStatuses) message() string {
 	return strings.Join(msgs, "; ")
 }
 
-// func getPodsForDeletion(client kubernetes.Interface, nodeName string, options *DrainOptions) (*podDeleteList, []error) {
-
-// 	labelSelector, err := labels.Parse(options.Selector.String())
-// 	if err != nil {
-// 		return nil, []error{err}
-// 	}
-
-// 	podList, err := client.CoreV1().Pods(metav1.NamespaceAll).List(context.TODO(), metav1.ListOptions{
-// 		LabelSelector: labelSelector.String(),
-// 		FieldSelector: fields.SelectorFromSet(fields.Set{"spec.nodeName": nodeName}).String()})
-// 	if err != nil {
-// 		return nil, []error{err}
-// 	}
-
-// 	pods := []podDelete{}
-
-// 	daemonSetOptions := &DaemonSetFilterOptions{
-// 		client:           client.AppsV1(),
-// 		force:            options.Force,
-// 		ignoreDaemonSets: options.IgnoreDaemonsets,
-// 	}
-
-// 	for _, pod := range podList.Items {
-// 		var status podDeleteStatus
-// 		for _, filter := range []podFilter{daemonSetOptions.daemonSetFilter, mirrorPodFilter, options.localStorageFilter, options.unreplicatedFilter} {
-// 			status = filter(pod)
-// 			if !status.delete {
-// 				// short-circuit as soon as pod is filtered out
-// 				// at that point, there is no reason to run pod
-// 				// through any additional filters
-// 				break
-// 			}
-// 		}
-// 		// Add the pod to podDeleteList no matter what podDeleteStatus is,
-// 		// those pods whose podDeleteStatus is false like DaemonSet will
-// 		// be catched by list.errors()
-// 		pods = append(pods, podDelete{
-// 			pod:    pod,
-// 			status: status,
-// 		})
-// 	}
-
-// 	list := &podDeleteList{items: pods}
-
-// 	if errs := list.errors(); len(errs) > 0 {
-// 		return list, errs
-// 	}
-
-// 	return list, nil
-// }
-
 // getPodsForDeletion receives resource info for a node, and returns all the pods from the given node that we
 // are planning on deleting. If there are any pods preventing us from deleting, we return that list in an error.
 func getPodsForDeletion(client kubernetes.Interface, node *corev1.Node, options *DrainOptions) (pods []corev1.Pod, err error) {
@@ -496,108 +445,6 @@ func evictPods(client typedpolicyv1beta1.PolicyV1beta1Interface, pods []corev1.P
 	return utilerrors.NewAggregate(errors)
 }
 
-// // EvictPod will evict the give pod, or return an error if it couldn't
-// func (d *Helper) EvictPod(pod corev1.Pod, policyGroupVersion string) error {
-// 	if d.DryRunStrategy == cmdutil.DryRunServer {
-// 		if err := d.DryRunVerifier.HasSupport(pod.GroupVersionKind()); err != nil {
-// 			return err
-// 		}
-// 	}
-
-// 	delOpts := d.makeDeleteOptions()
-// 	eviction := &policyv1beta1.Eviction{
-// 		TypeMeta: metav1.TypeMeta{
-// 			APIVersion: policyGroupVersion,
-// 			Kind:       EvictionKind,
-// 		},
-// 		ObjectMeta: metav1.ObjectMeta{
-// 			Name:      pod.Name,
-// 			Namespace: pod.Namespace,
-// 		},
-// 		DeleteOptions: &delOpts,
-// 	}
-
-// 	// Remember to change change the URL manipulation func when Eviction's version change
-// 	return d.Client.PolicyV1beta1().Evictions(eviction.Namespace).Evict(context.TODO(), eviction)
-// }
-
-// func evictPods(client typedpolicyv1beta1.PolicyV1beta1Interface, pods []corev1.Pod, policyGroupVersion string, options *DrainOptions, getPodFn func(namespace, name string) (*corev1.Pod, error)) error {
-// 	returnCh := make(chan error, 1)
-// 	stopCh := make(chan struct{})
-// 	var wg sync.WaitGroup
-
-// 	for _, pod := range pods {
-// 		logger.Infof("Evicting pod %s", pod.Name)
-// 		wg.Add(1)
-// 		go func(pod corev1.Pod, returnCh chan error, stopCh chan struct{}) {
-// 			defer wg.Done()
-// 			var err error
-// 			for {
-// 				err = evictPod(client, pod, policyGroupVersion, options.GracePeriodSeconds)
-// 				if err == nil {
-// 					break
-// 				} else if apierrors.IsNotFound(err) {
-// 					returnCh <- nil
-// 					return
-// 				} else if apierrors.IsTooManyRequests(err) {
-// 					select {
-// 					case <-stopCh:
-// 						logger.Infof("Received channel close for pod %q. Returning!!!", pod.Name)
-// 						return
-// 					default:
-// 						logger.Infof("error when evicting pod %q (will retry after 5s): %v", pod.Name, err)
-// 						time.Sleep(5 * time.Second)
-// 					}
-// 				} else {
-// 					returnCh <- fmt.Errorf("error when evicting pod %q: %v", pod.Name, err)
-// 					return
-// 				}
-// 			}
-// 			podArray := []corev1.Pod{pod}
-// 			_, err = waitForDelete(podArray, 1*time.Second, time.Duration(math.MaxInt64), true, getPodFn)
-// 			logger.Infof("Pod %s deleted", pod.Name)
-// 			if err == nil {
-// 				returnCh <- nil
-// 			} else {
-// 				returnCh <- fmt.Errorf("error when waiting for pod %q to terminate: %v", pod.Name, err)
-// 			}
-// 		}(pod, returnCh, stopCh)
-// 	}
-// 	logger.Info("next step")
-
-// 	doneCount := 0
-// 	var errors []error
-
-// 	// 0 timeout means infinite, we use MaxInt64 to represent it.
-// 	var globalTimeout time.Duration
-// 	if options.Timeout == 0 {
-// 		globalTimeout = time.Duration(math.MaxInt64)
-// 	} else {
-// 		globalTimeout = options.Timeout
-// 	}
-// 	globalTimeoutCh := time.After(globalTimeout)
-// 	numPods := len(pods)
-// 	for doneCount < numPods {
-// 		select {
-// 		case err := <-returnCh:
-// 			logger.Info("next step 2")
-// 			doneCount++
-// 			if err != nil {
-// 				errors = append(errors, err)
-// 			}
-// 		case <-globalTimeoutCh:
-// 			logger.Info("Closing stopCh")
-// 			close(stopCh)
-// 			wg.Wait()
-// 			return fmt.Errorf("Drain did not complete within %v", globalTimeout)
-// 		}
-// 	}
-// 	logger.Info("next step 3")
-// 	close(stopCh)
-// 	wg.Wait()
-// 	return utilerrors.NewAggregate(errors)
-// }
-
 func deletePods(client typedcorev1.CoreV1Interface, pods []corev1.Pod, options *DrainOptions, getPodFn func(namespace, name string) (*corev1.Pod, error)) error {
 	// 0 timeout means infinite, we use MaxInt64 to represent it.
 	var globalTimeout time.Duration
@@ -634,31 +481,6 @@ func DeletePod(client typedcorev1.CoreV1Interface, pod corev1.Pod) error {
 	return client.Pods(pod.Namespace).Delete(context.TODO(), pod.Name, metav1.DeleteOptions{})
 }
 
-// func deletePods(client typedcorev1.CoreV1Interface, pods []corev1.Pod, options *DrainOptions, getPodFn func(namespace, name string) (*corev1.Pod, error)) error {
-// 	// 0 timeout means infinite, we use MaxInt64 to represent it.
-// 	ctx := context.TODO()
-
-// 	var globalTimeout time.Duration
-// 	if options.Timeout == 0 {
-// 		globalTimeout = time.Duration(math.MaxInt64)
-// 	} else {
-// 		globalTimeout = options.Timeout
-// 	}
-// 	deleteOptions := &metav1.DeleteOptions{}
-// 	if options.GracePeriodSeconds >= 0 {
-// 		gracePeriodSeconds := int64(options.GracePeriodSeconds)
-// 		deleteOptions.GracePeriodSeconds = &gracePeriodSeconds
-// 	}
-// 	for _, pod := range pods {
-// 		err := client.Pods(pod.Namespace).Delete(ctx, pod.Name, *deleteOptions)
-// 		if err != nil && !apierrors.IsNotFound(err) {
-// 			return err
-// 		}
-// 	}
-// 	_, err := waitForDelete(pods, 1*time.Second, globalTimeout, false, getPodFn)
-// 	return err
-// }
-
 func waitForDelete(params waitForDeleteParams) ([]corev1.Pod, error) {
 	pods := params.pods
 	err := wait.PollImmediate(params.interval, params.timeout, func() (bool, error) {
@@ -692,37 +514,6 @@ func waitForDelete(params waitForDeleteParams) ([]corev1.Pod, error) {
 	})
 	return pods, err
 }
-
-// func waitForDelete(pods []corev1.Pod, interval, timeout time.Duration, usingEviction bool, getPodFn func(string, string) (*corev1.Pod, error)) ([]corev1.Pod, error) {
-// 	var verbStr string
-// 	if usingEviction {
-// 		verbStr = "evicted"
-// 	} else {
-// 		verbStr = "deleted"
-// 	}
-
-// 	err := wait.PollImmediate(interval, timeout, func() (bool, error) {
-// 		pendingPods := []corev1.Pod{}
-// 		for i, pod := range pods {
-// 			logger.Infof("removing pod %q", pod.Name)
-// 			p, err := getPodFn(pod.Namespace, pod.Name)
-// 			if apierrors.IsNotFound(err) || (p != nil && p.ObjectMeta.UID != pod.ObjectMeta.UID) {
-// 				logger.Infof("pod %q removed (%s)", pod.Name, verbStr)
-// 				continue
-// 			} else if err != nil {
-// 				return false, err
-// 			} else {
-// 				pendingPods = append(pendingPods, pods[i])
-// 			}
-// 		}
-// 		pods = pendingPods
-// 		if len(pendingPods) > 0 {
-// 			return false, nil
-// 		}
-// 		return true, nil
-// 	})
-// 	return pods, err
-// }
 
 // SupportEviction uses Discovery API to find out if the server
 // supports the eviction subresource.  If supported, it will return

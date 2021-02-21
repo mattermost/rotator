@@ -1,7 +1,6 @@
-package rotator
+package aws
 
 import (
-	"fmt"
 	"strings"
 	"time"
 
@@ -10,8 +9,10 @@ import (
 	"github.com/aws/aws-sdk-go/service/autoscaling"
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 )
 
+// GetNodeHostnames returns the hostnames of an autoscaling group nodes
 func GetNodeHostnames(autoscalingGroupNodes []*autoscaling.Instance) ([]string, error) {
 	svc := ec2.New(session.New())
 	var instanceHostnames []string
@@ -27,6 +28,7 @@ func GetNodeHostnames(autoscalingGroupNodes []*autoscaling.Instance) ([]string, 
 	return instanceHostnames, nil
 }
 
+// GetInstanceID returns the instance ID of a nodename
 func GetInstanceID(nodeName string) (string, error) {
 	svc := ec2.New(session.New())
 	resp, err := svc.DescribeInstances(&ec2.DescribeInstancesInput{
@@ -43,13 +45,14 @@ func GetInstanceID(nodeName string) (string, error) {
 	return *resp.Reservations[0].Instances[0].InstanceId, nil
 }
 
-func DetachNodes(decrement bool, nodesToDetach []string, autoscalingGroupName string) error {
+// DetachNodes detaches nodes from an autoscaling group
+func DetachNodes(decrement bool, nodesToDetach []string, autoscalingGroupName string, logger *logrus.Entry) error {
 	asgSvc := autoscaling.New(session.New())
 
 	for _, node := range nodesToDetach {
 		instanceID, err := GetInstanceID(node)
 		if err != nil {
-			return errors.Wrapf(err, "Failed to detach and delete node %s", node)
+			return errors.Wrapf(err, "Failed to detach node %s", node)
 		}
 
 		logger.Infof("Detaching instance %s", instanceID)
@@ -68,7 +71,8 @@ func DetachNodes(decrement bool, nodesToDetach []string, autoscalingGroupName st
 	return nil
 }
 
-func TerminateNodes(nodesToTerminate []string) error {
+// TerminateNodes terminates list of nodes
+func TerminateNodes(nodesToTerminate []string, logger *logrus.Entry) error {
 	logger.Infof("Terminating %d nodes", len(nodesToTerminate))
 
 	for _, node := range nodesToTerminate {
@@ -93,6 +97,7 @@ func TerminateNodes(nodesToTerminate []string) error {
 	return nil
 }
 
+// GetAutoscalingGroups gets all the autoscaling groups that their names contain the cluster ID passed
 func GetAutoscalingGroups(clusterID string) ([]*autoscaling.Group, error) {
 	svc := autoscaling.New(session.New())
 
@@ -106,11 +111,8 @@ func GetAutoscalingGroups(clusterID string) ([]*autoscaling.Group, error) {
 			return nil, errors.Wrap(err, "Failed to describe autoscaling groups")
 		}
 		for _, asg := range resp.AutoScalingGroups {
-			for _, tag := range asg.Tags {
-				if *tag.Key == "KubernetesCluster" && *tag.Value == fmt.Sprintf("%s-kops.k8s.local", clusterID) || *tag.Key == "Name" && strings.Contains(*tag.Value, clusterID) {
-					autoscalingGroups = append(autoscalingGroups, asg)
-					break
-				}
+			if strings.Contains(*asg.AutoScalingGroupName, clusterID) {
+				autoscalingGroups = append(autoscalingGroups, asg)
 			}
 		}
 
@@ -123,10 +125,11 @@ func GetAutoscalingGroups(clusterID string) ([]*autoscaling.Group, error) {
 	return autoscalingGroups, nil
 }
 
-func (autoscalingGroup *AutoscalingGroup) AutoScalingGroupReady() (*autoscaling.Group, error) {
+// AutoScalingGroupReady gets an AutoscalingGroup object and checks that autoscaling group is in ready state
+func AutoScalingGroupReady(autoscalingGroupName string, desiredCapacity int64, logger *logrus.Entry) (*autoscaling.Group, error) {
 	svc := autoscaling.New(session.New())
 	timeout := 300
-	logger.Infof("Waiting up to %d seconds for load balancer %s to become ready...", timeout, autoscalingGroup.Name)
+	logger.Infof("Waiting up to %d seconds for autoscaling group %s to become ready...", timeout, autoscalingGroupName)
 
 	timer := time.NewTimer(time.Duration(timeout) * time.Second)
 	defer timer.Stop()
@@ -134,18 +137,18 @@ func (autoscalingGroup *AutoscalingGroup) AutoScalingGroupReady() (*autoscaling.
 	for {
 		select {
 		case <-timer.C:
-			return nil, errors.New("timed out waiting for load balancer to become ready")
+			return nil, errors.New("timed out waiting for autoscaling group to become ready")
 		default:
 			resp, err := svc.DescribeAutoScalingGroups(&autoscaling.DescribeAutoScalingGroupsInput{
 				AutoScalingGroupNames: []*string{
-					aws.String(autoscalingGroup.Name),
+					aws.String(autoscalingGroupName),
 				},
 			})
 			if err != nil {
-				return nil, errors.Wrapf(err, "Failed to describe the autoscaling group %s", autoscalingGroup.Name)
+				return nil, errors.Wrapf(err, "Failed to describe the autoscaling group %s", autoscalingGroupName)
 			}
 
-			if int64(len(resp.AutoScalingGroups[0].Instances)) == autoscalingGroup.DesiredCapacity {
+			if int64(len(resp.AutoScalingGroups[0].Instances)) == desiredCapacity {
 				return resp.AutoScalingGroups[0], nil
 			}
 

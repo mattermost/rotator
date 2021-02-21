@@ -1,4 +1,4 @@
-package rotator
+package k8s
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -14,13 +15,13 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
-func NodesReady(nodes []string) error {
+func NodesReady(nodes []string, clientset *kubernetes.Clientset, logger *logrus.Entry) error {
 	wait := 600
 	logger.Infof("Waiting up to %d seconds for all nodes to become ready...", wait)
 	for _, node := range nodes {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(wait)*time.Second)
 		defer cancel()
-		node, err := WaitForNodeRunning(ctx, node)
+		node, err := WaitForNodeRunning(ctx, node, clientset, logger)
 		if err != nil {
 			return errors.Wrapf(err, "Node %s failed to get ready", node)
 		}
@@ -33,11 +34,7 @@ func NodesReady(nodes []string) error {
 // WaitForNodeRunning will poll a given kubernetes node at a regular interval for
 // it to enter the 'Ready' state. If the node fails to become ready before
 // the provided timeout then an error will be returned.
-func WaitForNodeRunning(ctx context.Context, nodeName string) (*corev1.Node, error) {
-	clientset, err := getClientSet()
-	if err != nil {
-		return nil, errors.Wrap(err, "Failed to get k8s clientset")
-	}
+func WaitForNodeRunning(ctx context.Context, nodeName string, clientset *kubernetes.Clientset, logger *logrus.Entry) (*corev1.Node, error) {
 	for {
 		node, err := clientset.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
 		if err == nil {
@@ -61,53 +58,11 @@ func WaitForNodeRunning(ctx context.Context, nodeName string) (*corev1.Node, err
 	}
 }
 
-func DrainNodes(nodesToDrain []string, attempts, gracePeriod int) error {
+func DeleteClusterNodes(nodes []string, clientset *kubernetes.Clientset) error {
 	ctx := context.TODO()
-
-	clientset, err := getClientSet()
-	if err != nil {
-		return errors.Wrap(err, "Failed to get k8s clientset")
-	}
-
-	drainOptions := &DrainOptions{
-		DeleteLocalData:    true,
-		IgnoreDaemonsets:   true,
-		Timeout:            600,
-		GracePeriodSeconds: gracePeriod,
-	}
-
-	logger.Infof("Draining %d nodes", len(nodesToDrain))
-
-	for _, nodeToDrain := range nodesToDrain {
-		logger.Infof("Draining node %s", nodeToDrain)
-		node, err := clientset.CoreV1().Nodes().Get(ctx, nodeToDrain, metav1.GetOptions{})
-		if err != nil {
-			return errors.Wrapf(err, "Failed to get node %s", nodeToDrain)
-		}
-		err = Drain(clientset, []*corev1.Node{node}, drainOptions)
-		if err != nil {
-			if attempts--; attempts > 0 {
-				logger.Infof("Node %s drain failed, retrying...", nodeToDrain)
-				DrainNodes([]string{nodeToDrain}, attempts-1, gracePeriod)
-			} else {
-				return errors.Wrapf(err, "Failed to drain node %s", nodeToDrain)
-			}
-		}
-		logger.Infof("Node %s drained successfully", nodeToDrain)
-	}
-
-	return nil
-}
-
-func DeleteClusterNodes(nodes []string) error {
-	ctx := context.TODO()
-	clientset, err := getClientSet()
-	if err != nil {
-		return errors.Wrap(err, "Failed to get k8s clientset")
-	}
 
 	for _, node := range nodes {
-		err = clientset.CoreV1().Nodes().Delete(ctx, node, metav1.DeleteOptions{})
+		err := clientset.CoreV1().Nodes().Delete(ctx, node, metav1.DeleteOptions{})
 		if err != nil {
 			return err
 		}
@@ -116,7 +71,7 @@ func DeleteClusterNodes(nodes []string) error {
 }
 
 // getClientSet gets the k8s clientset
-func getClientSet() (*kubernetes.Clientset, error) {
+func GetClientset() (*kubernetes.Clientset, error) {
 	kubeconfig := filepath.Join(
 		os.Getenv("HOME"), ".kube", "config",
 	)

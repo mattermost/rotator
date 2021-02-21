@@ -4,8 +4,12 @@ import (
 	"strings"
 	"time"
 
+	awsTools "github.com/mattermost/node-rotator/aws"
+	k8sTools "github.com/mattermost/node-rotator/k8s"
 	"github.com/mattermost/node-rotator/model"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
+	"k8s.io/client-go/kubernetes"
 )
 
 type AutoscalingGroup struct {
@@ -16,15 +20,55 @@ type AutoscalingGroup struct {
 
 // InitRotateCluster is used to call the RotateCluster function.
 func InitRotateCluster(cluster *model.Cluster) {
-	err := RotateCluster(cluster)
+	logger := logger.WithField("cluster", cluster.ClusterID)
+	err := RotateCluster(cluster, logger)
 	if err != nil {
 		logger.WithError(err).Error("Failed to rotate the cluster nodes")
 	}
 }
 
 // RotateCluster is used to rotate the Cluster nodes.
-func RotateCluster(cluster *model.Cluster) error {
-	autoscalingGroups, err := GetAutoscalingGroups(cluster.ClusterID)
+func RotateCluster(cluster *model.Cluster, logger *logrus.Entry) error {
+
+	clientset, err := getk8sClientset(cluster)
+	if err != nil {
+		return err
+	}
+	// if len(cluster.Cluster.RotatorMetadata.MasterGroups) > 0  || cluster.Cluster.RotatorMetadata.WorkerGroups > 0 {
+	// 	for _, asg := range cluster.Cluster.RotatorMetadata.MasterGroups {
+	// 		logger.Infof("The autoscaling group %s has %d instance(s)", autoscalingGroup.Name, autoscalingGroup.DesiredCapacity)
+
+	// 		err = masterNodeRotation(cluster, &autoscalingGroup, clientset, logger)
+	// 		if err != nil {
+	// 			return err
+	// 		}
+
+	// 		logger.Infof("Checking that all %d nodes are running...", autoscalingGroup.DesiredCapacity)
+	// 		err = finalCheck(&autoscalingGroup, clientset, logger)
+	// 		if err != nil {
+	// 			return err
+	// 		}
+
+	// 		logger.Infof("ASG %s rotated successfully.", autoscalingGroup.Name)
+	// 	}
+
+	// 	for _, asg := range cluster.Cluster.RotatorMetadata.WorkerGroups {
+	// 		logger.Infof("The autoscaling group %s has %d instance(s)", autoscalingGroup.Name, autoscalingGroup.DesiredCapacity)
+
+	// 		err = workerNodeRotation(cluster, &autoscalingGroup, clientset, logger)
+	// 		if err != nil {
+	// 			return err
+	// 		}
+
+	// 		logger.Infof("Checking that all %d nodes are running...", autoscalingGroup.DesiredCapacity)
+	// 		err = finalCheck(&autoscalingGroup, clientset, logger)
+	// 		if err != nil {
+	// 			return err
+	// 		}
+	// 	}
+	// }
+
+	autoscalingGroups, err := awsTools.GetAutoscalingGroups(cluster.ClusterID)
 	if err != nil {
 		return err
 	}
@@ -32,7 +76,7 @@ func RotateCluster(cluster *model.Cluster) error {
 
 	for _, asg := range autoscalingGroups {
 		autoscalingGroup := AutoscalingGroup{}
-		err := autoscalingGroup.setObject(asg)
+		err := autoscalingGroup.SetObject(asg)
 		if err != nil {
 			return err
 		}
@@ -40,13 +84,13 @@ func RotateCluster(cluster *model.Cluster) error {
 		if strings.Contains(autoscalingGroup.Name, "master") && cluster.RotateMasters {
 			logger.Infof("The autoscaling group %s has %d instance(s)", autoscalingGroup.Name, autoscalingGroup.DesiredCapacity)
 
-			err = autoscalingGroup.masterNodeRotation(cluster)
+			err = masterNodeRotation(cluster, &autoscalingGroup, clientset, logger)
 			if err != nil {
 				return err
 			}
 
 			logger.Infof("Checking that all %d nodes are running...", autoscalingGroup.DesiredCapacity)
-			err = autoscalingGroup.finalCheck()
+			err = finalCheck(&autoscalingGroup, clientset, logger)
 			if err != nil {
 				return err
 			}
@@ -55,13 +99,13 @@ func RotateCluster(cluster *model.Cluster) error {
 		} else if !strings.Contains(autoscalingGroup.Name, "master") && cluster.RotateWorkers {
 			logger.Infof("The autoscaling group %s has %d instance(s)", autoscalingGroup.Name, autoscalingGroup.DesiredCapacity)
 
-			err = autoscalingGroup.workerNodeRotation(cluster)
+			err = workerNodeRotation(cluster, &autoscalingGroup, clientset, logger)
 			if err != nil {
 				return err
 			}
 
 			logger.Infof("Checking that all %d nodes are running...", autoscalingGroup.DesiredCapacity)
-			err = autoscalingGroup.finalCheck()
+			err = finalCheck(&autoscalingGroup, clientset, logger)
 			if err != nil {
 				return err
 			}
@@ -73,18 +117,18 @@ func RotateCluster(cluster *model.Cluster) error {
 	return nil
 }
 
-func (autoscalingGroup *AutoscalingGroup) finalCheck() error {
-	asg, err := autoscalingGroup.AutoScalingGroupReady()
+func finalCheck(autoscalingGroup *AutoscalingGroup, clientset *kubernetes.Clientset, logger *logrus.Entry) error {
+	asg, err := awsTools.AutoScalingGroupReady(autoscalingGroup.Name, autoscalingGroup.DesiredCapacity, logger)
 	if err != nil {
 		return errors.Wrap(err, "Failed to get AutoscalingGroup ready")
 	}
 
-	asgNodes, err := GetNodeHostnames(asg.Instances)
+	asgNodes, err := awsTools.GetNodeHostnames(asg.Instances)
 	if err != nil {
 		return errors.Wrap(err, "Failed to get node hostnames")
 	}
 
-	err = NodesReady(asgNodes)
+	err = k8sTools.NodesReady(asgNodes, clientset, logger)
 	if err != nil {
 		return errors.Wrap(err, "Failed to get cluster nodes ready")
 	}
@@ -92,23 +136,24 @@ func (autoscalingGroup *AutoscalingGroup) finalCheck() error {
 	return nil
 }
 
-func (autoscalingGroup *AutoscalingGroup) masterNodeRotation(cluster *model.Cluster) error {
+func masterNodeRotation(cluster *model.Cluster, autoscalingGroup *AutoscalingGroup, clientset *kubernetes.Clientset, logger *logrus.Entry) error {
+
 	for len(autoscalingGroup.Nodes) > 0 {
 		logger.Infof("The number of nodes in the ASG to be rotated is %d", len(autoscalingGroup.Nodes))
 
 		nodesToRotate := []string{autoscalingGroup.Nodes[0]}
 
-		err := DrainNodes(nodesToRotate, 10, int(cluster.EvictGracePeriod))
+		err := DrainNodes(nodesToRotate, 10, int(cluster.EvictGracePeriod), clientset)
 		if err != nil {
 			return err
 		}
 
-		err = DetachNodes(false, nodesToRotate, autoscalingGroup.Name)
+		err = awsTools.DetachNodes(false, nodesToRotate, autoscalingGroup.Name, logger)
 		if err != nil {
 			return err
 		}
 
-		err = TerminateNodes(nodesToRotate)
+		err = awsTools.TerminateNodes(nodesToRotate, logger)
 		if err != nil {
 			return err
 		}
@@ -116,34 +161,35 @@ func (autoscalingGroup *AutoscalingGroup) masterNodeRotation(cluster *model.Clus
 		logger.Info("Sleeping 60 seconds for autoscaling group to balance...")
 		time.Sleep(60 * time.Second)
 
-		autoscalingGroupReady, err := autoscalingGroup.AutoScalingGroupReady()
+		autoscalingGroupReady, err := awsTools.AutoScalingGroupReady(autoscalingGroup.Name, autoscalingGroup.DesiredCapacity, logger)
 		if err != nil {
 			return err
 		}
 
-		nodeHostnames, err := GetNodeHostnames(autoscalingGroupReady.Instances)
+		nodeHostnames, err := awsTools.GetNodeHostnames(autoscalingGroupReady.Instances)
 		if err != nil {
 			return err
 		}
 
-		newNodes := autoscalingGroup.newNodes(nodeHostnames)
+		newNodes := newNodes(nodeHostnames, autoscalingGroup.Nodes)
 		if err != nil {
 			return err
 		}
 
-		err = NodesReady(newNodes)
+		err = k8sTools.NodesReady(newNodes, clientset, logger)
 		if err != nil {
 			return err
 		}
 
 		logger.Info("Removing nodes from rotation list")
-		autoscalingGroup.PopNodes(nodesToRotate)
+		autoscalingGroup.popNodes(nodesToRotate)
 
 	}
 	return nil
 }
 
-func (autoscalingGroup *AutoscalingGroup) workerNodeRotation(cluster *model.Cluster) error {
+func workerNodeRotation(cluster *model.Cluster, autoscalingGroup *AutoscalingGroup, clientset *kubernetes.Clientset, logger *logrus.Entry) error {
+
 	for len(autoscalingGroup.Nodes) > 0 {
 		logger.Infof("The number of nodes in the ASG to be rotated is %d", len(autoscalingGroup.Nodes))
 
@@ -155,7 +201,7 @@ func (autoscalingGroup *AutoscalingGroup) workerNodeRotation(cluster *model.Clus
 			nodesToRotate = autoscalingGroup.Nodes[:int(cluster.MaxScaling)]
 		}
 
-		err := DetachNodes(false, nodesToRotate, autoscalingGroup.Name)
+		err := awsTools.DetachNodes(false, nodesToRotate, autoscalingGroup.Name, logger)
 		if err != nil {
 			return err
 		}
@@ -163,43 +209,43 @@ func (autoscalingGroup *AutoscalingGroup) workerNodeRotation(cluster *model.Clus
 		logger.Info("Sleeping 60 seconds for autoscaling group to balance...")
 		time.Sleep(60 * time.Second)
 
-		autoscalingGroupReady, err := autoscalingGroup.AutoScalingGroupReady()
+		autoscalingGroupReady, err := awsTools.AutoScalingGroupReady(autoscalingGroup.Name, autoscalingGroup.DesiredCapacity, logger)
 		if err != nil {
 			return err
 		}
 
-		nodeHostnames, err := GetNodeHostnames(autoscalingGroupReady.Instances)
+		nodeHostnames, err := awsTools.GetNodeHostnames(autoscalingGroupReady.Instances)
 		if err != nil {
 			return err
 		}
 
-		newNodes := autoscalingGroup.newNodes(nodeHostnames)
+		newNodes := newNodes(nodeHostnames, autoscalingGroup.Nodes)
 		if err != nil {
 			return err
 		}
 
-		err = NodesReady(newNodes)
+		err = k8sTools.NodesReady(newNodes, clientset, logger)
 		if err != nil {
 			return err
 		}
 
-		err = DrainNodes(nodesToRotate, 10, int(cluster.EvictGracePeriod))
+		err = DrainNodes(nodesToRotate, 10, int(cluster.EvictGracePeriod), clientset)
 		if err != nil {
 			return err
 		}
 
-		err = TerminateNodes(nodesToRotate)
+		err = awsTools.TerminateNodes(nodesToRotate, logger)
 		if err != nil {
 			return err
 		}
 
-		err = DeleteClusterNodes(nodesToRotate)
+		err = k8sTools.DeleteClusterNodes(nodesToRotate, clientset)
 		if err != nil {
 			return err
 		}
 
 		logger.Info("Removing nodes from rotation list")
-		autoscalingGroup.PopNodes(nodesToRotate)
+		autoscalingGroup.popNodes(nodesToRotate)
 
 		if len(autoscalingGroup.Nodes) > 0 {
 			logger.Infof("Waiting for %d seconds before next node rotation", cluster.WaitBetweenRotations)

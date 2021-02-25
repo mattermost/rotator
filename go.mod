@@ -1,4 +1,4 @@
-module github.com/mattermost/node-rotator
+module github.com/mattermost/rotator
 
 go 1.15
 

@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
-	"github.com/mattermost/node-rotator/api"
-	"github.com/mattermost/node-rotator/model"
+	"github.com/mattermost/rotator/api"
+	"github.com/mattermost/rotator/model"
 	"github.com/sirupsen/logrus"
 
 	"github.com/spf13/cobra"

@@ -3,9 +3,9 @@ package rotator
 import (
 	"time"
 
-	awsTools "github.com/mattermost/node-rotator/aws"
-	k8sTools "github.com/mattermost/node-rotator/k8s"
-	"github.com/mattermost/node-rotator/model"
+	awsTools "github.com/mattermost/rotator/aws"
+	k8sTools "github.com/mattermost/rotator/k8s"
+	"github.com/mattermost/rotator/model"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"k8s.io/client-go/kubernetes"

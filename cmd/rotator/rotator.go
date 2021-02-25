@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"os"
 
-	"github.com/mattermost/node-rotator/model"
+	"github.com/mattermost/rotator/model"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 )

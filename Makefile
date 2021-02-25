@@ -7,7 +7,7 @@ DOCKER_BASE_IMAGE = alpine:3.13
 
 # Variables
 GO = go
-APP := node-rotator
+APP := rotator
 APPNAME := node-rotator
 FLEET_CONTROLLER_IMAGE ?= mattermost/node-rotator:test
 

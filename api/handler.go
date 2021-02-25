@@ -3,7 +3,7 @@ package api
 import (
 	"net/http"
 
-	"github.com/mattermost/node-rotator/model"
+	"github.com/mattermost/rotator/model"
 	log "github.com/sirupsen/logrus"
 )
 

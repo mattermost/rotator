@@ -4,8 +4,8 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
-	"github.com/mattermost/node-rotator/model"
-	rotator "github.com/mattermost/node-rotator/rotator"
+	"github.com/mattermost/rotator/model"
+	rotator "github.com/mattermost/rotator/rotator"
 )
 
 // Register registers the API endpoints on the given router.

@@ -2,17 +2,22 @@ package rotator
 
 import (
 	"context"
+	"strings"
+	"time"
 
 	"github.com/aws/aws-sdk-go/service/autoscaling"
 	awsTools "github.com/mattermost/node-rotator/aws"
 	k8sTools "github.com/mattermost/node-rotator/k8s"
 	"github.com/mattermost/node-rotator/model"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
+	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 )
 
+// newNodes separates old nodes from new in a provided slice and returns new.
 func newNodes(allNodes, oldNodes []string) []string {
 	var newNodes []string
 	for _, node := range allNodes {
@@ -25,9 +30,10 @@ func newNodes(allNodes, oldNodes []string) []string {
 	return newNodes
 }
 
+// SetObject sets each AutoscalingGroup object.
 func (autoscalingGroup *AutoscalingGroup) SetObject(asg *autoscaling.Group) error {
 	autoscalingGroup.Name = *asg.AutoScalingGroupName
-	autoscalingGroup.DesiredCapacity = *asg.DesiredCapacity
+	autoscalingGroup.DesiredCapacity = int(*asg.DesiredCapacity)
 	nodeHostNames, err := awsTools.GetNodeHostnames(asg.Instances)
 	if err != nil {
 		return errors.Wrap(err, "Failed to get asg instance node names and set asg object")
@@ -36,6 +42,7 @@ func (autoscalingGroup *AutoscalingGroup) SetObject(asg *autoscaling.Group) erro
 	return nil
 }
 
+// popNodes removes a node that completed rotation from the AutoscalingGroup object node list.
 func (autoscalingGroup *AutoscalingGroup) popNodes(popNodes []string) {
 	var updatedList []string
 	for _, node := range autoscalingGroup.Nodes {
@@ -54,21 +61,8 @@ func (autoscalingGroup *AutoscalingGroup) popNodes(popNodes []string) {
 	return
 }
 
-func (autoscalingGroup *AutoscalingGroup) popNode(i int) {
-	copy(autoscalingGroup.Nodes[i:], autoscalingGroup.Nodes[i+1:])                  // Shift a[i+1:] left one index.
-	autoscalingGroup.Nodes[len(autoscalingGroup.Nodes)-1] = ""                      // Erase last element (write zero value).
-	autoscalingGroup.Nodes = autoscalingGroup.Nodes[:len(autoscalingGroup.Nodes)-1] // Truncate slice.
-}
-
-func (autoscalingGroup *AutoscalingGroup) RemoveDeletedNode(nodeToDelete string) {
-	for i, node := range autoscalingGroup.Nodes {
-		if node == nodeToDelete {
-			autoscalingGroup.Nodes = append(autoscalingGroup.Nodes[:i], autoscalingGroup.Nodes[i+1:]...)
-		}
-	}
-}
-
-func DrainNodes(nodesToDrain []string, attempts, gracePeriod int, clientset *kubernetes.Clientset) error {
+// DrainNodes covers all node drain actions.
+func (autoscalingGroup *AutoscalingGroup) DrainNodes(nodesToDrain []string, attempts, gracePeriod, wait int, clientset *kubernetes.Clientset, logger *logrus.Entry, nodeType string) error {
 	ctx := context.TODO()
 
 	drainOptions := &DrainOptions{
@@ -80,27 +74,57 @@ func DrainNodes(nodesToDrain []string, attempts, gracePeriod int, clientset *kub
 
 	logger.Infof("Draining %d nodes", len(nodesToDrain))
 
+	remaining := len(nodesToDrain)
+
 	for _, nodeToDrain := range nodesToDrain {
 		logger.Infof("Draining node %s", nodeToDrain)
+
 		node, err := clientset.CoreV1().Nodes().Get(ctx, nodeToDrain, metav1.GetOptions{})
-		if err != nil {
+		if k8sErrors.IsNotFound(err) {
+			logger.Warnf("Node %s not found, assuming already drained", nodeToDrain)
+		} else if err != nil {
 			return errors.Wrapf(err, "Failed to get node %s", nodeToDrain)
-		}
-		err = Drain(clientset, []*corev1.Node{node}, drainOptions)
-		if err != nil {
-			if attempts--; attempts > 0 {
-				logger.Infof("Node %s drain failed, retrying...", nodeToDrain)
-				DrainNodes([]string{nodeToDrain}, attempts-1, gracePeriod, clientset)
-			} else {
-				return errors.Wrapf(err, "Failed to drain node %s", nodeToDrain)
+		} else {
+			err = Drain(clientset, []*corev1.Node{node}, drainOptions)
+			if err != nil {
+				if attempts--; attempts > 0 {
+					logger.Infof("Node %s drain failed, retrying...", nodeToDrain)
+					autoscalingGroup.DrainNodes([]string{nodeToDrain}, attempts-1, gracePeriod, wait, clientset, logger, nodeType)
+				} else {
+					return errors.Wrapf(err, "Failed to drain node %s", nodeToDrain)
+				}
 			}
+			logger.Infof("Node %s drained successfully", nodeToDrain)
 		}
-		logger.Infof("Node %s drained successfully", nodeToDrain)
+
+		//Terminating nodes after each drain rotation ensures that nodes do not hang and create alerts.
+		if nodeType == "worker" {
+			err = awsTools.TerminateNodes([]string{nodeToDrain}, logger)
+			if err != nil {
+				return err
+			}
+
+			err = k8sTools.DeleteClusterNodes([]string{nodeToDrain}, clientset, logger)
+			if err != nil {
+				return err
+			}
+
+			logger.Info("Removing node from rotation list")
+			autoscalingGroup.popNodes([]string{nodeToDrain})
+
+		}
+		remaining--
+		if remaining > 0 {
+			logger.Infof("Waiting for %d seconds before next node drain", wait)
+			time.Sleep(time.Duration(wait) * time.Second)
+		}
+
 	}
 
 	return nil
 }
 
+// getk8sClientset returns the k8s clientset. Uses local config if no client is provided.
 func getk8sClientset(cluster *model.Cluster) (*kubernetes.Clientset, error) {
 	if cluster.ClientSet != nil {
 		return cluster.ClientSet, nil
@@ -112,4 +136,30 @@ func getk8sClientset(cluster *model.Cluster) (*kubernetes.Clientset, error) {
 	}
 	return clientSet, nil
 
+}
+
+// GetSetAutoscalingGroups separates master from worker Autoscaling Groups and prepares the respective objects.
+func (metadata *RotatorMetadata) GetSetAutoscalingGroups(cluster *model.Cluster) error {
+	asgs, err := awsTools.GetAutoscalingGroups(cluster.ClusterID)
+	if err != nil {
+		return err
+	}
+	logger.Infof("Cluster with cluster ID %s is consisted of %d Autoscaling Groups", cluster.ClusterID, len(asgs))
+	var autoscalingGroups []AutoscalingGroup
+
+	for _, asg := range asgs {
+		autoscalingGroup := AutoscalingGroup{}
+		err := autoscalingGroup.SetObject(asg)
+		if err != nil {
+			return err
+		}
+
+		if strings.Contains(autoscalingGroup.Name, "master") && cluster.RotateMasters {
+			metadata.MasterGroups = append(metadata.MasterGroups, autoscalingGroup)
+		} else if !strings.Contains(autoscalingGroup.Name, "master") && cluster.RotateWorkers {
+			metadata.WorkerGroups = append(metadata.WorkerGroups, autoscalingGroup)
+		}
+		autoscalingGroups = append(autoscalingGroups, autoscalingGroup)
+	}
+	return nil
 }

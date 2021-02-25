@@ -2,14 +2,11 @@ module github.com/mattermost/node-rotator
 
 go 1.15
 
-replace github.com/mattermost/mattermost-cloud => /Users/stylianosrigas/go/src/github.com/mattermost/mattermost-cloud
-
 require (
 	github.com/aws/aws-sdk-go v1.36.7
 	github.com/googleapis/gnostic v0.5.3 // indirect
 	github.com/gorilla/mux v1.8.0
 	github.com/imdario/mergo v0.3.11 // indirect
-	github.com/mattermost/mattermost-cloud v0.40.0
 	github.com/pborman/uuid v1.2.1
 	github.com/pkg/errors v0.9.1
 	github.com/sirupsen/logrus v1.7.0

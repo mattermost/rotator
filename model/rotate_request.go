@@ -10,12 +10,13 @@ import (
 // RotateClusterRequest specifies the parameters for a new cluster rotation.
 type RotateClusterRequest struct {
 	ClusterID            string `json:"clusterID,omitempty"`
-	MaxScaling           int64  `json:"maxScaling,omitempty"`
+	MaxScaling           int    `json:"maxScaling,omitempty"`
 	RotateMasters        bool   `json:"rotateMasters,omitempty"`
 	RotateWorkers        bool   `json:"rotateWorkers,omitempty"`
-	MaxDrainRetries      int64  `json:"maxDrainRetries,omitempty"`
-	EvictGracePeriod     int64  `json:"evictGracePeriod,omitempty"`
-	WaitBetweenRotations int64  `json:"waitBetweenRotations,omitempty"`
+	MaxDrainRetries      int    `json:"maxDrainRetries,omitempty"`
+	EvictGracePeriod     int    `json:"evictGracePeriod,omitempty"`
+	WaitBetweenRotations int    `json:"waitBetweenRotations,omitempty"`
+	WaitBetweenDrains    int    `json:"waitBetweenDrains,omitempty"`
 }
 
 // NewRotateClusterRequestFromReader decodes the request and returns after validation and setting the defaults.
@@ -45,6 +46,4 @@ func (request *RotateClusterRequest) Validate() error {
 }
 
 // SetDefaults sets the default values for a cluster provision request.
-func (request *RotateClusterRequest) SetDefaults() {
-
-}
+func (request *RotateClusterRequest) SetDefaults() {}

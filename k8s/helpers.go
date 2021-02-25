@@ -58,12 +58,14 @@ func WaitForNodeRunning(ctx context.Context, nodeName string, clientset *kuberne
 	}
 }
 
-func DeleteClusterNodes(nodes []string, clientset *kubernetes.Clientset) error {
+func DeleteClusterNodes(nodes []string, clientset *kubernetes.Clientset, logger *logrus.Entry) error {
 	ctx := context.TODO()
 
 	for _, node := range nodes {
 		err := clientset.CoreV1().Nodes().Delete(ctx, node, metav1.DeleteOptions{})
-		if err != nil {
+		if k8sErrors.IsNotFound(err) {
+			logger.Warnf("Node %s not found, assuming already removed from cluster", node)
+		} else if err != nil {
 			return err
 		}
 	}

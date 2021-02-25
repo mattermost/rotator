@@ -12,7 +12,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// GetNodeHostnames returns the hostnames of an autoscaling group nodes
+// GetNodeHostnames returns the hostnames of the autoscaling group nodes.
 func GetNodeHostnames(autoscalingGroupNodes []*autoscaling.Instance) ([]string, error) {
 	svc := ec2.New(session.New())
 	var instanceHostnames []string
@@ -28,8 +28,8 @@ func GetNodeHostnames(autoscalingGroupNodes []*autoscaling.Instance) ([]string, 
 	return instanceHostnames, nil
 }
 
-// GetInstanceID returns the instance ID of a nodename
-func GetInstanceID(nodeName string) (string, error) {
+// GetInstanceID returns the instance ID of a node.
+func GetInstanceID(nodeName string, logger *logrus.Entry) (string, error) {
 	svc := ec2.New(session.New())
 	resp, err := svc.DescribeInstances(&ec2.DescribeInstancesInput{
 		Filters: []*ec2.Filter{
@@ -42,43 +42,65 @@ func GetInstanceID(nodeName string) (string, error) {
 	if err != nil {
 		return "", errors.Wrap(err, "Failed to describe ec2 instance")
 	}
+
+	if resp.Reservations == nil {
+		logger.Warnf("Instance %s not found, assuming that instance was already deleted", nodeName)
+		return "", nil
+	}
+
 	return *resp.Reservations[0].Instances[0].InstanceId, nil
 }
 
-// DetachNodes detaches nodes from an autoscaling group
+// DetachNodes detaches nodes from an autoscaling group.
 func DetachNodes(decrement bool, nodesToDetach []string, autoscalingGroupName string, logger *logrus.Entry) error {
 	asgSvc := autoscaling.New(session.New())
 
 	for _, node := range nodesToDetach {
-		instanceID, err := GetInstanceID(node)
+		instanceID, err := GetInstanceID(node, logger)
 		if err != nil {
 			return errors.Wrapf(err, "Failed to detach node %s", node)
 		}
 
-		logger.Infof("Detaching instance %s", instanceID)
-		_, err = asgSvc.DetachInstances(&autoscaling.DetachInstancesInput{
-			AutoScalingGroupName: aws.String(autoscalingGroupName),
-			InstanceIds: []*string{
-				aws.String(instanceID),
-			},
-			ShouldDecrementDesiredCapacity: aws.Bool(decrement),
-		})
-		if err != nil {
-			return errors.Wrapf(err, "Failed to detach instance %s", instanceID)
+		if instanceID == "" {
+			logger.Infof("Instance %s does not exist. No detachment required", node)
+			return nil
 		}
+
+		nodeInGroup, err := nodeInAutoscalingGroup(autoscalingGroupName, instanceID)
+		if err != nil {
+			return errors.Wrapf(err, "Failed to check if instance is member of the ASG")
+		}
+		if nodeInGroup {
+			logger.Infof("Detaching instance %s", instanceID)
+			_, err = asgSvc.DetachInstances(&autoscaling.DetachInstancesInput{
+				AutoScalingGroupName: aws.String(autoscalingGroupName),
+				InstanceIds: []*string{
+					aws.String(instanceID),
+				},
+				ShouldDecrementDesiredCapacity: aws.Bool(decrement),
+			})
+			if err != nil {
+				return errors.Wrapf(err, "Failed to detach instance %s", instanceID)
+			}
+		}
+
 	}
 
 	return nil
 }
 
-// TerminateNodes terminates list of nodes
+// TerminateNodes terminates a slice of nodes.
 func TerminateNodes(nodesToTerminate []string, logger *logrus.Entry) error {
 	logger.Infof("Terminating %d nodes", len(nodesToTerminate))
-
 	for _, node := range nodesToTerminate {
-		instanceID, err := GetInstanceID(node)
+		instanceID, err := GetInstanceID(node, logger)
 		if err != nil {
 			return errors.Wrapf(err, "Failed to detach and delete node %s", node)
+		}
+
+		if instanceID == "" {
+			logger.Infof("Instance %s does not exist. No termination required", node)
+			return nil
 		}
 
 		logger.Infof("Terminating instance %s", instanceID)
@@ -97,10 +119,9 @@ func TerminateNodes(nodesToTerminate []string, logger *logrus.Entry) error {
 	return nil
 }
 
-// GetAutoscalingGroups gets all the autoscaling groups that their names contain the cluster ID passed
+// GetAutoscalingGroups gets all the autoscaling groups that their names contain the cluster ID passed.
 func GetAutoscalingGroups(clusterID string) ([]*autoscaling.Group, error) {
 	svc := autoscaling.New(session.New())
-
 	var autoscalingGroups []*autoscaling.Group
 	var nextToken *string
 	for {
@@ -115,7 +136,6 @@ func GetAutoscalingGroups(clusterID string) ([]*autoscaling.Group, error) {
 				autoscalingGroups = append(autoscalingGroups, asg)
 			}
 		}
-
 		if resp.NextToken == nil || *resp.NextToken == "" {
 			break
 		}
@@ -125,8 +145,8 @@ func GetAutoscalingGroups(clusterID string) ([]*autoscaling.Group, error) {
 	return autoscalingGroups, nil
 }
 
-// AutoScalingGroupReady gets an AutoscalingGroup object and checks that autoscaling group is in ready state
-func AutoScalingGroupReady(autoscalingGroupName string, desiredCapacity int64, logger *logrus.Entry) (*autoscaling.Group, error) {
+// AutoScalingGroupReady gets an AutoscalingGroup object and checks that autoscaling group is in ready state.
+func AutoScalingGroupReady(autoscalingGroupName string, desiredCapacity int, logger *logrus.Entry) (*autoscaling.Group, error) {
 	svc := autoscaling.New(session.New())
 	timeout := 300
 	logger.Infof("Waiting up to %d seconds for autoscaling group %s to become ready...", timeout, autoscalingGroupName)
@@ -148,7 +168,7 @@ func AutoScalingGroupReady(autoscalingGroupName string, desiredCapacity int64, l
 				return nil, errors.Wrapf(err, "Failed to describe the autoscaling group %s", autoscalingGroupName)
 			}
 
-			if int64(len(resp.AutoScalingGroups[0].Instances)) == desiredCapacity {
+			if len(resp.AutoScalingGroups[0].Instances) == desiredCapacity {
 				return resp.AutoScalingGroups[0], nil
 			}
 
@@ -156,4 +176,24 @@ func AutoScalingGroupReady(autoscalingGroupName string, desiredCapacity int64, l
 			time.Sleep(5 * time.Second)
 		}
 	}
+}
+
+// nodeInAutoscalingGroup checks if an instance is member of an Autoscaling Group.
+func nodeInAutoscalingGroup(autoscalingGroupName, instanceID string) (bool, error) {
+	svc := autoscaling.New(session.New())
+	resp, err := svc.DescribeAutoScalingGroups(&autoscaling.DescribeAutoScalingGroupsInput{
+		AutoScalingGroupNames: []*string{
+			aws.String(autoscalingGroupName),
+		},
+	})
+	if err != nil {
+		return false, err
+	}
+
+	for _, instance := range resp.AutoScalingGroups[0].Instances {
+		if *instance.InstanceId == instanceID {
+			return true, nil
+		}
+	}
+	return false, nil
 }

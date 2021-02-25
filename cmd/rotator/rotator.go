@@ -13,12 +13,13 @@ func init() {
 	clusterCmd.PersistentFlags().String("server", "http://localhost:8079", "The Node Rotator server whose API will be queried.")
 
 	rotatorCmd.Flags().String("cluster", "", "the cluster ID of the cluster to go through node rotation")
-	rotatorCmd.Flags().Int64("max-scaling", 1, "the max number of nodes rotating in parallel")
+	rotatorCmd.Flags().Int("max-scaling", 1, "the max number of nodes rotating in parallel")
 	rotatorCmd.Flags().Bool("rotate-masters", false, "if disabled, master nodes will not be rotated")
 	rotatorCmd.Flags().Bool("rotate-workers", false, "if disabled, worker nodes will not be rotated")
-	rotatorCmd.Flags().Int64("max-drain-retries", 10, "the max number of retries when drain fails")
-	rotatorCmd.Flags().Int64("evict-grace-period", 60, "the pod eviction grace period")
-	rotatorCmd.Flags().Int64("wait-between-rotations", 60, "the time in seconds between each node rotation")
+	rotatorCmd.Flags().Int("max-drain-retries", 10, "the max number of retries when drain fails")
+	rotatorCmd.Flags().Int("evict-grace-period", 60, "the pod eviction grace period")
+	rotatorCmd.Flags().Int("wait-between-rotations", 60, "the time in seconds between each node rotation")
+	rotatorCmd.Flags().Int("wait-between-drains", 60, "the time in seconds between each node drain")
 
 	clusterCmd.AddCommand(rotatorCmd)
 }
@@ -28,6 +29,7 @@ var clusterCmd = &cobra.Command{
 	Short: "Rotate cluster nodes by the node rotator server.",
 }
 
+// TODO: Add node handling capabilities
 var nodeCmd = &cobra.Command{
 	Use:   "node",
 	Short: "Handle node changees, drain, detach, terminate, etc.",
@@ -42,12 +44,13 @@ var rotatorCmd = &cobra.Command{
 		client := model.NewClient(serverAddress)
 
 		clusterID, _ := command.Flags().GetString("cluster")
-		maxScaling, _ := command.Flags().GetInt64("max-scaling")
+		maxScaling, _ := command.Flags().GetInt("max-scaling")
 		rotateMasters, _ := command.Flags().GetBool("rotate-masters")
 		rotateWorkers, _ := command.Flags().GetBool("rotate-workers")
-		maxDrainRetries, _ := command.Flags().GetInt64("max-drain-retries")
-		evictGracePeriod, _ := command.Flags().GetInt64("evict-grace-period")
-		waitBetweenRotations, _ := command.Flags().GetInt64("wait-between-rotations")
+		maxDrainRetries, _ := command.Flags().GetInt("max-drain-retries")
+		evictGracePeriod, _ := command.Flags().GetInt("evict-grace-period")
+		waitBetweenRotations, _ := command.Flags().GetInt("wait-between-rotations")
+		waitBetweenDrains, _ := command.Flags().GetInt("wait-between-drains")
 
 		rotator, err := client.RotateCluster(&model.RotateClusterRequest{
 			ClusterID:            clusterID,
@@ -57,6 +60,7 @@ var rotatorCmd = &cobra.Command{
 			MaxDrainRetries:      maxDrainRetries,
 			EvictGracePeriod:     evictGracePeriod,
 			WaitBetweenRotations: waitBetweenRotations,
+			WaitBetweenDrains:    waitBetweenDrains,
 		})
 		if err != nil {
 			return errors.Wrap(err, "failed to rotate nodes of the k8s cluster")

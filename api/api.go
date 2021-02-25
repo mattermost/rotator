@@ -35,6 +35,7 @@ func initCluster(apiRouter *mux.Router, context *Context) {
 //     "maxDrainRetries": 10,
 //     "EvictGracePeriod": 60,
 //     "WaitBetweenRotations": 60,
+//     "WaitBetweenDrains": 60,
 // }
 func handleRotateCluster(c *Context, w http.ResponseWriter, r *http.Request) {
 	rotateClusterRequest, err := model.NewRotateClusterRequestFromReader(r.Body)
@@ -52,9 +53,12 @@ func handleRotateCluster(c *Context, w http.ResponseWriter, r *http.Request) {
 		MaxDrainRetries:      rotateClusterRequest.MaxDrainRetries,
 		EvictGracePeriod:     rotateClusterRequest.EvictGracePeriod,
 		WaitBetweenRotations: rotateClusterRequest.WaitBetweenRotations,
+		WaitBetweenDrains:    rotateClusterRequest.WaitBetweenDrains,
 	}
 
-	go rotator.InitRotateCluster(&cluster)
+	rotatorMetada := rotator.RotatorMetadata{}
+
+	go rotator.InitRotateCluster(&cluster, &rotatorMetada)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusAccepted)

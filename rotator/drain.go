@@ -388,7 +388,7 @@ func evictPods(client typedpolicyv1beta1.PolicyV1beta1Interface, pods []corev1.P
 				select {
 				case <-ctx.Done():
 					// return here or we'll leak a goroutine.
-					returnCh <- fmt.Errorf("error when evicting pod %q: global timeout reached: %v", pod.Name, globalTimeout)
+					returnCh <- fmt.Errorf("Error when evicting pod %q: global timeout reached: %v", pod.Name, globalTimeout)
 					return
 				default:
 				}
@@ -399,14 +399,14 @@ func evictPods(client typedpolicyv1beta1.PolicyV1beta1Interface, pods []corev1.P
 					returnCh <- nil
 					return
 				} else if apierrors.IsTooManyRequests(err) {
-					logger.Errorf("error when evicting pod %q (will retry after 5s): %v\n", pod.Name, err)
+					logger.Errorf("Error when evicting pod %q (will retry after 5s): %v\n", pod.Name, err)
 					time.Sleep(5 * time.Second)
 				} else {
-					returnCh <- fmt.Errorf("error when evicting pod %q: %v", pod.Name, err)
+					returnCh <- fmt.Errorf("Error when evicting pod %q: %v", pod.Name, err)
 					return
 				}
 			}
-			logger.Infof("pod %s/%s evicted\n", pod.Namespace, pod.Name)
+			logger.Infof("Pod %s/%s evicted\n", pod.Namespace, pod.Name)
 			params := waitForDeleteParams{
 				ctx:                             ctx,
 				pods:                            []corev1.Pod{pod},

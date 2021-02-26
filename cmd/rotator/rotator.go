@@ -10,7 +10,7 @@ import (
 )
 
 func init() {
-	clusterCmd.PersistentFlags().String("server", "http://localhost:8079", "The Node Rotator server whose API will be queried.")
+	clusterCmd.PersistentFlags().String("server", "http://localhost:8079", "The Rotator server whose API will be queried.")
 
 	rotatorCmd.Flags().String("cluster", "", "the cluster ID of the cluster to go through node rotation")
 	rotatorCmd.Flags().Int("max-scaling", 1, "the max number of nodes rotating in parallel")
@@ -26,7 +26,7 @@ func init() {
 
 var clusterCmd = &cobra.Command{
 	Use:   "cluster",
-	Short: "Rotate cluster nodes by the node rotator server.",
+	Short: "Rotate cluster nodes by the rotator server.",
 }
 
 // TODO: Add node handling capabilities

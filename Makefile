@@ -11,10 +11,6 @@ APP := rotator
 APPNAME := node-rotator
 FLEET_CONTROLLER_IMAGE ?= mattermost/node-rotator:test
 
-# Build variables
-COMMIT_HASH ?= $(shell git rev-parse HEAD)
-BUILD_DATE  ?= $(shell date +%FT%T%z)
-
 ################################################################################
 
 export GO111MODULE=on
@@ -38,13 +34,13 @@ unittest:
 # Build for distribution
 .PHONY: build
 build:
-	@echo Building Mattermost Node Rotator
+	@echo Building Mattermost Rotator
 	env GOOS=linux GOARCH=amd64 $(GO) build -o $(APPNAME) ./cmd/$(APP)
 
 # Builds the docker image
 .PHONY: build-image
 build-image:
-	@echo Building Node Rotator Docker Image
+	@echo Building Rotator Docker Image
 	docker build \
 	--build-arg DOCKER_BUILD_IMAGE=$(DOCKER_BUILD_IMAGE) \
 	--build-arg DOCKER_BASE_IMAGE=$(DOCKER_BASE_IMAGE) \

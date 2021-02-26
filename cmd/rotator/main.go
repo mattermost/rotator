@@ -1,4 +1,4 @@
-// Package main is the entry point to the Mattermost Node Rotator server and CLI.
+// Package main is the entry point to the Mattermost Rotator server and CLI.
 package main
 
 import (
@@ -9,7 +9,7 @@ import (
 
 var rootCmd = &cobra.Command{
 	Use:   "rotator",
-	Short: "Node Rotator is a tool to rotate K8s cluster nodes",
+	Short: "Rotator is a tool to rotate K8s cluster nodes",
 	Run: func(cmd *cobra.Command, args []string) {
 		serverCmd.RunE(cmd, args)
 	},

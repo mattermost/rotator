@@ -39,7 +39,27 @@ func NewRotateClusterRequestFromReader(reader io.Reader) (*RotateClusterRequest,
 // Validate validates the values of a cluster rotate request.
 func (request *RotateClusterRequest) Validate() error {
 	if request.ClusterID == "" {
-		return errors.Errorf("Cluster ID cannot be empty")
+		return errors.New("Cluster ID cannot be empty")
+	}
+
+	if request.MaxScaling < 1 {
+		return errors.New("Max scaling cannot be 0 or negative")
+	}
+
+	if request.MaxDrainRetries < 0 {
+		return errors.New("Max drain retries cannot be negative")
+	}
+
+	if request.EvictGracePeriod < 0 {
+		return errors.New("Evict grace period cannot be negative")
+	}
+
+	if request.WaitBetweenRotations < 0 {
+		return errors.New("Wait between rotations cannot be negative")
+	}
+
+	if request.WaitBetweenDrains < 0 {
+		return errors.New("Wait between drains cannot be negative")
 	}
 
 	return nil

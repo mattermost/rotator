@@ -40,7 +40,7 @@ func serverCmdF(command *cobra.Command, args []string) error {
 	}
 
 	logger := logger.WithField("instance", instanceID)
-	logger.Info("Starting Mattermost Node Rotator Server")
+	logger.Info("Starting Mattermost Rotator Server")
 
 	router := mux.NewRouter()
 

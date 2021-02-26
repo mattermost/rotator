@@ -25,10 +25,10 @@ type RotatorMetadata struct {
 }
 
 // InitRotateCluster is used to call the RotateCluster function.
-func InitRotateCluster(cluster *model.Cluster, rotatorMetadata *RotatorMetadata) (*RotatorMetadata, error) {
-	logger := logger.WithField("cluster", cluster.ClusterID)
+func InitRotateCluster(cluster *model.Cluster, rotatorMetadata *RotatorMetadata, logger *logrus.Entry) (*RotatorMetadata, error) {
 	rotatorMetadata, err := RotateCluster(cluster, logger, rotatorMetadata)
 	if err != nil {
+		logger.WithError(err).Error("failed to rotate cluster")
 		return rotatorMetadata, err
 	}
 

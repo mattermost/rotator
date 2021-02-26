@@ -106,7 +106,7 @@ const (
 	kUnmanagedWarning    = "Deleting pods not managed by ReplicationController, ReplicaSet, Job, DaemonSet or StatefulSet"
 )
 
-func Drain(client kubernetes.Interface, nodes []*corev1.Node, options *DrainOptions) (err error) {
+func Drain(client kubernetes.Interface, nodes []*corev1.Node, options *DrainOptions) error {
 	nodeInterface := client.CoreV1().Nodes()
 	for _, node := range nodes {
 		err := Cordon(nodeInterface, node)
@@ -124,8 +124,7 @@ func Drain(client kubernetes.Interface, nodes []*corev1.Node, options *DrainOpti
 			drainedNodes.Insert(node.Name)
 			logger.Infof("Drained node %q", node.Name)
 		} else {
-			logger.Error(err)
-			logger.Errorf("Unable to drain node %q", node.Name)
+			logger.WithError(err).Errorf("Unable to drain node %q", node.Name)
 			remainingNodes := []string{}
 			fatal = err
 			for _, remainingNode := range nodes {
@@ -267,7 +266,7 @@ func (ps podStatuses) message() string {
 
 // getPodsForDeletion receives resource info for a node, and returns all the pods from the given node that we
 // are planning on deleting. If there are any pods preventing us from deleting, we return that list in an error.
-func getPodsForDeletion(client kubernetes.Interface, node *corev1.Node, options *DrainOptions) (pods []corev1.Pod, err error) {
+func getPodsForDeletion(client kubernetes.Interface, node *corev1.Node, options *DrainOptions) ([]corev1.Pod, error) {
 	ctx := context.TODO()
 
 	listOptions := metav1.ListOptions{
@@ -278,7 +277,7 @@ func getPodsForDeletion(client kubernetes.Interface, node *corev1.Node, options 
 	}
 	podList, err := client.CoreV1().Pods(options.Namespace).List(ctx, listOptions)
 	if err != nil {
-		return pods, err
+		return nil, err
 	}
 
 	ws := podStatuses{}
@@ -290,6 +289,7 @@ func getPodsForDeletion(client kubernetes.Interface, node *corev1.Node, options 
 		ignoreDaemonSets: options.IgnoreDaemonsets,
 	}
 
+	var pods []corev1.Pod
 	for _, pod := range podList.Items {
 		podOk := true
 		for _, filt := range []podFilter{daemonSetOptions.daemonSetFilter, mirrorPodFilter, options.localStorageFilter, options.unreplicatedFilter} {

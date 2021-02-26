@@ -29,7 +29,7 @@ clusterRotator := rotatorModel.Cluster{
 Calling the `InitRotateCluster` function of the rotator package with the defined clusterRotator object is all is needed to rotate a cluster. Example can be seen bellow:
 
 ```golang
-rotatorMetadata, err = rotator.InitRotateCluster(&clusterRotator, rotatorMetadata)
+rotatorMetadata, err = rotator.InitRotateCluster(&clusterRotator, rotatorMetadata, logger)
 	if err != nil {
 		cluster.ProvisionerMetadataKops.RotatorRequest.Status = rotatorMetadata
 		return err
@@ -42,7 +42,7 @@ where
 rotatorMetadata = &rotator.RotatorMetadata{}
 ```
 
-The node rotator returns metadata that in case of rotation failure include information of ASGs pending rotation. This metadata can be passed back to the InitRotateCluster and the rotator will resume from where it left. 
+The rotator returns metadata that in case of rotation failure include information of ASGs pending rotation. This metadata can be passed back to the InitRotateCluster and the rotator will resume from where it left. 
 
 
 ### Use Rotator as CLI tool

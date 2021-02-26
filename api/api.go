@@ -25,7 +25,7 @@ func initCluster(apiRouter *mux.Router, context *Context) {
 	clustersRouter.Handle("", addContext(handleRotateCluster)).Methods("POST")
 }
 
-// handleRotateCluster responds to POST /api/rotate, beginning the process of creating a new RDS Aurora cluster.
+// handleRotateCluster responds to POST /api/rotate, beginning the process of rotating a k8s cluster.
 // sample body:
 // {
 //     "clusterID": "12345678",
@@ -38,6 +38,7 @@ func initCluster(apiRouter *mux.Router, context *Context) {
 //     "WaitBetweenDrains": 60,
 // }
 func handleRotateCluster(c *Context, w http.ResponseWriter, r *http.Request) {
+
 	rotateClusterRequest, err := model.NewRotateClusterRequestFromReader(r.Body)
 	if err != nil {
 		c.Logger.WithError(err).Error("failed to decode request")
@@ -58,7 +59,7 @@ func handleRotateCluster(c *Context, w http.ResponseWriter, r *http.Request) {
 
 	rotatorMetada := rotator.RotatorMetadata{}
 
-	go rotator.InitRotateCluster(&cluster, &rotatorMetada)
+	go rotator.InitRotateCluster(&cluster, &rotatorMetada, c.Logger.WithField("cluster", cluster.ClusterID))
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusAccepted)

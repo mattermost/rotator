@@ -46,8 +46,10 @@ func WaitForNodeRunning(ctx context.Context, nodeName string, clientset *kuberne
 				}
 			}
 		}
-		if err != nil && k8sErrors.IsNotFound(err) {
+		if k8sErrors.IsNotFound(err) {
 			logger.Infof("Node %s not found, waiting...", nodeName)
+		} else if err != nil {
+			logger.WithError(err).Errorf("Error while waiting for node %s to become ready...", nodeName)
 		}
 
 		select {

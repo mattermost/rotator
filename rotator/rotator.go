@@ -150,9 +150,6 @@ func MasterNodeRotation(cluster *model.Cluster, autoscalingGroup *AutoscalingGro
 		}
 
 		newNodes := newNodes(nodeHostnames, autoscalingGroup.Nodes)
-		if err != nil {
-			return err
-		}
 
 		err = k8sTools.NodesReady(newNodes, clientset, logger)
 		if err != nil {
@@ -175,7 +172,7 @@ func WorkerNodeRotation(cluster *model.Cluster, autoscalingGroup *AutoscalingGro
 		var nodesToRotate []string
 
 		if len(autoscalingGroup.Nodes) < int(cluster.MaxScaling) {
-			nodesToRotate = autoscalingGroup.Nodes[:len(autoscalingGroup.Nodes)]
+			nodesToRotate = autoscalingGroup.Nodes
 		} else {
 			nodesToRotate = autoscalingGroup.Nodes[:int(cluster.MaxScaling)]
 		}
@@ -199,9 +196,6 @@ func WorkerNodeRotation(cluster *model.Cluster, autoscalingGroup *AutoscalingGro
 		}
 
 		newNodes := newNodes(nodeHostnames, autoscalingGroup.Nodes)
-		if err != nil {
-			return err
-		}
 
 		err = k8sTools.NodesReady(newNodes, clientset, logger)
 		if err != nil {

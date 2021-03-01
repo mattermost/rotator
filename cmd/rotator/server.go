@@ -20,7 +20,7 @@ var instanceID string
 
 var serverCmd = &cobra.Command{
 	Use:   "server",
-	Short: "Runs the node rotaror API server",
+	Short: "Runs the node rotator API server",
 	RunE:  serverCmdF,
 }
 

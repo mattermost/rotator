@@ -19,12 +19,14 @@ import (
 
 // newNodes separates old nodes from new in a provided slice and returns new.
 func newNodes(allNodes, oldNodes []string) []string {
+	mb := make(map[string]struct{}, len(oldNodes))
+	for _, x := range oldNodes {
+		mb[x] = struct{}{}
+	}
 	var newNodes []string
-	for _, node := range allNodes {
-		for _, oldNode := range oldNodes {
-			if node != oldNode {
-				newNodes = append(newNodes, node)
-			}
+	for _, x := range allNodes {
+		if _, found := mb[x]; !found {
+			newNodes = append(newNodes, x)
 		}
 	}
 	return newNodes
@@ -86,13 +88,12 @@ func (autoscalingGroup *AutoscalingGroup) DrainNodes(nodesToDrain []string, atte
 			return errors.Wrapf(err, "Failed to get node %s", nodeToDrain)
 		} else {
 			err = Drain(clientset, []*corev1.Node{node}, drainOptions)
+			for i := 1; i < attempts && err != nil; i++ {
+				logger.Warnf("Failed to drain node %q on attempt %d, retrying up to %d times", nodesToDrain, i, attempts)
+				err = Drain(clientset, []*corev1.Node{node}, drainOptions)
+			}
 			if err != nil {
-				if attempts--; attempts > 0 {
-					logger.Infof("Node %s drain failed, retrying...", nodeToDrain)
-					autoscalingGroup.DrainNodes([]string{nodeToDrain}, attempts-1, gracePeriod, wait, clientset, logger, nodeType)
-				} else {
-					return errors.Wrapf(err, "Failed to drain node %s", nodeToDrain)
-				}
+				return errors.Wrapf(err, "Failed to drain node %s", nodeToDrain)
 			}
 			logger.Infof("Node %s drained successfully", nodeToDrain)
 		}
@@ -145,7 +146,6 @@ func (metadata *RotatorMetadata) GetSetAutoscalingGroups(cluster *model.Cluster)
 		return err
 	}
 	logger.Infof("Cluster with cluster ID %s is consisted of %d Autoscaling Groups", cluster.ClusterID, len(asgs))
-	var autoscalingGroups []AutoscalingGroup
 
 	for _, asg := range asgs {
 		autoscalingGroup := AutoscalingGroup{}
@@ -159,7 +159,6 @@ func (metadata *RotatorMetadata) GetSetAutoscalingGroups(cluster *model.Cluster)
 		} else if !strings.Contains(autoscalingGroup.Name, "master") && cluster.RotateWorkers {
 			metadata.WorkerGroups = append(metadata.WorkerGroups, autoscalingGroup)
 		}
-		autoscalingGroups = append(autoscalingGroups, autoscalingGroup)
 	}
 	return nil
 }

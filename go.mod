@@ -4,7 +4,6 @@ go 1.15
 
 require (
 	github.com/aws/aws-sdk-go v1.36.7
-	github.com/googleapis/gnostic v0.5.3 // indirect
 	github.com/gorilla/mux v1.8.0
 	github.com/imdario/mergo v0.3.11 // indirect
 	github.com/pborman/uuid v1.2.1

@@ -55,7 +55,7 @@ Simply run the following:
 
 ```bash
 go install ./cmd/rotator
-alias cloud='$HOME/go/bin/rotator'
+alias rotator='$HOME/go/bin/rotator'
 ```
 
 #### Running

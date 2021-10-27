@@ -121,7 +121,7 @@ func MasterNodeRotation(cluster *model.Cluster, autoscalingGroup *AutoscalingGro
 
 		nodesToRotate := []string{autoscalingGroup.Nodes[0]}
 
-		err := autoscalingGroup.DrainNodes(nodesToRotate, 10, int(cluster.EvictGracePeriod), cluster.WaitBetweenDrains, clientset, logger, "master")
+		err := autoscalingGroup.DrainNodes(nodesToRotate, 10, int(cluster.EvictGracePeriod), cluster.WaitBetweenDrains, cluster.WaitBetweenPodEvictions, clientset, logger, "master")
 		if err != nil {
 			return err
 		}
@@ -202,7 +202,7 @@ func WorkerNodeRotation(cluster *model.Cluster, autoscalingGroup *AutoscalingGro
 			return err
 		}
 
-		err = autoscalingGroup.DrainNodes(nodesToRotate, 10, int(cluster.EvictGracePeriod), cluster.WaitBetweenDrains, clientset, logger, "worker")
+		err = autoscalingGroup.DrainNodes(nodesToRotate, 10, int(cluster.EvictGracePeriod), cluster.WaitBetweenDrains, cluster.WaitBetweenPodEvictions, clientset, logger, "worker")
 		if err != nil {
 			return err
 		}

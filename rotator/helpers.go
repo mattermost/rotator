@@ -64,7 +64,7 @@ func (autoscalingGroup *AutoscalingGroup) popNodes(popNodes []string) {
 }
 
 // DrainNodes covers all node drain actions.
-func (autoscalingGroup *AutoscalingGroup) DrainNodes(nodesToDrain []string, attempts, gracePeriod, wait int, clientset *kubernetes.Clientset, logger *logrus.Entry, nodeType string) error {
+func (autoscalingGroup *AutoscalingGroup) DrainNodes(nodesToDrain []string, attempts, gracePeriod, wait, waitBetweenPodEvictions int, clientset *kubernetes.Clientset, logger *logrus.Entry, nodeType string) error {
 	ctx := context.TODO()
 
 	drainOptions := &DrainOptions{
@@ -87,10 +87,10 @@ func (autoscalingGroup *AutoscalingGroup) DrainNodes(nodesToDrain []string, atte
 		} else if err != nil {
 			return errors.Wrapf(err, "Failed to get node %s", nodeToDrain)
 		} else {
-			err = Drain(clientset, []*corev1.Node{node}, drainOptions)
+			err = Drain(clientset, []*corev1.Node{node}, drainOptions, waitBetweenPodEvictions)
 			for i := 1; i < attempts && err != nil; i++ {
 				logger.Warnf("Failed to drain node %q on attempt %d, retrying up to %d times", nodesToDrain, i, attempts)
-				err = Drain(clientset, []*corev1.Node{node}, drainOptions)
+				err = Drain(clientset, []*corev1.Node{node}, drainOptions, waitBetweenPodEvictions)
 			}
 			if err != nil {
 				return errors.Wrapf(err, "Failed to drain node %s", nodeToDrain)

@@ -106,7 +106,7 @@ const (
 	kUnmanagedWarning    = "Deleting pods not managed by ReplicationController, ReplicaSet, Job, DaemonSet or StatefulSet"
 )
 
-func Drain(client kubernetes.Interface, nodes []*corev1.Node, options *DrainOptions) error {
+func Drain(client kubernetes.Interface, nodes []*corev1.Node, options *DrainOptions, waitBetweenPodEvictions int) error {
 	nodeInterface := client.CoreV1().Nodes()
 	for _, node := range nodes {
 		err := Cordon(nodeInterface, node)
@@ -119,7 +119,7 @@ func Drain(client kubernetes.Interface, nodes []*corev1.Node, options *DrainOpti
 	var fatal error
 
 	for _, node := range nodes {
-		err := DeleteOrEvictPods(client, node, options)
+		err := DeleteOrEvictPods(client, node, options, waitBetweenPodEvictions)
 		if err == nil {
 			drainedNodes.Insert(node.Name)
 			logger.Infof("Drained node %q", node.Name)
@@ -147,12 +147,12 @@ func Drain(client kubernetes.Interface, nodes []*corev1.Node, options *DrainOpti
 // DeleteOrEvictPods deletes or (where supported) evicts pods from the
 // target node and waits until the deletion/eviction completes,
 // Timeout elapses, or an error occurs.
-func DeleteOrEvictPods(client kubernetes.Interface, node *corev1.Node, options *DrainOptions) error {
+func DeleteOrEvictPods(client kubernetes.Interface, node *corev1.Node, options *DrainOptions, waitBetweenPodEvictions int) error {
 	pods, err := getPodsForDeletion(client, node, options)
 	if err != nil {
 		return err
 	}
-	err = deleteOrEvictPods(client, pods, options)
+	err = deleteOrEvictPods(client, pods, options, waitBetweenPodEvictions)
 	if err != nil {
 		pendingPods, newErr := getPodsForDeletion(client, node, options)
 		if newErr != nil {
@@ -347,7 +347,7 @@ func evictPod(client typedpolicyv1beta1.PolicyV1beta1Interface, pod corev1.Pod, 
 }
 
 // deleteOrEvictPods deletes or evicts the pods on the api server
-func deleteOrEvictPods(client kubernetes.Interface, pods []corev1.Pod, options *DrainOptions) error {
+func deleteOrEvictPods(client kubernetes.Interface, pods []corev1.Pod, options *DrainOptions, waitBetweenPodEvictions int) error {
 	ctx := context.TODO()
 
 	if len(pods) == 0 {
@@ -365,12 +365,12 @@ func deleteOrEvictPods(client kubernetes.Interface, pods []corev1.Pod, options *
 
 	if len(policyGroupVersion) > 0 {
 		// Remember to change change the URL manipulation func when Evction's version change
-		return evictPods(client.PolicyV1beta1(), pods, policyGroupVersion, options, getPodFn)
+		return evictPods(client.PolicyV1beta1(), pods, policyGroupVersion, options, getPodFn, waitBetweenPodEvictions)
 	}
-	return deletePods(client.CoreV1(), pods, options, getPodFn)
+	return deletePods(client.CoreV1(), pods, options, getPodFn, waitBetweenPodEvictions)
 }
 
-func evictPods(client typedpolicyv1beta1.PolicyV1beta1Interface, pods []corev1.Pod, policyGroupVersion string, options *DrainOptions, getPodFn func(namespace, name string) (*corev1.Pod, error)) error {
+func evictPods(client typedpolicyv1beta1.PolicyV1beta1Interface, pods []corev1.Pod, policyGroupVersion string, options *DrainOptions, getPodFn func(namespace, name string) (*corev1.Pod, error), waitBetweenPodEvictions int) error {
 	returnCh := make(chan error, 1)
 	// 0 timeout means infinite, we use MaxInt64 to represent it.
 	var globalTimeout time.Duration
@@ -382,6 +382,7 @@ func evictPods(client typedpolicyv1beta1.PolicyV1beta1Interface, pods []corev1.P
 	ctx, cancel := context.WithTimeout(context.Background(), globalTimeout)
 	defer cancel()
 	for _, pod := range pods {
+		time.Sleep(time.Duration(waitBetweenPodEvictions) * time.Second)
 		go func(pod corev1.Pod, returnCh chan error) {
 			for {
 				logger.Infof("Evicting pod %s/%s\n", pod.Namespace, pod.Name)
@@ -445,7 +446,7 @@ func evictPods(client typedpolicyv1beta1.PolicyV1beta1Interface, pods []corev1.P
 	return utilerrors.NewAggregate(errors)
 }
 
-func deletePods(client typedcorev1.CoreV1Interface, pods []corev1.Pod, options *DrainOptions, getPodFn func(namespace, name string) (*corev1.Pod, error)) error {
+func deletePods(client typedcorev1.CoreV1Interface, pods []corev1.Pod, options *DrainOptions, getPodFn func(namespace, name string) (*corev1.Pod, error), waitBetweenPodEvictions int) error {
 	// 0 timeout means infinite, we use MaxInt64 to represent it.
 	var globalTimeout time.Duration
 	if options.Timeout == 0 {
@@ -454,6 +455,7 @@ func deletePods(client typedcorev1.CoreV1Interface, pods []corev1.Pod, options *
 		globalTimeout = options.Timeout * time.Second
 	}
 	for _, pod := range pods {
+		time.Sleep(time.Duration(waitBetweenPodEvictions) * time.Second)
 		err := DeletePod(client, pod)
 		if err != nil && !apierrors.IsNotFound(err) {
 			return err

@@ -9,14 +9,15 @@ import (
 
 // RotateClusterRequest specifies the parameters for a new cluster rotation.
 type RotateClusterRequest struct {
-	ClusterID            string `json:"clusterID,omitempty"`
-	MaxScaling           int    `json:"maxScaling,omitempty"`
-	RotateMasters        bool   `json:"rotateMasters,omitempty"`
-	RotateWorkers        bool   `json:"rotateWorkers,omitempty"`
-	MaxDrainRetries      int    `json:"maxDrainRetries,omitempty"`
-	EvictGracePeriod     int    `json:"evictGracePeriod,omitempty"`
-	WaitBetweenRotations int    `json:"waitBetweenRotations,omitempty"`
-	WaitBetweenDrains    int    `json:"waitBetweenDrains,omitempty"`
+	ClusterID               string `json:"clusterID,omitempty"`
+	MaxScaling              int    `json:"maxScaling,omitempty"`
+	RotateMasters           bool   `json:"rotateMasters,omitempty"`
+	RotateWorkers           bool   `json:"rotateWorkers,omitempty"`
+	MaxDrainRetries         int    `json:"maxDrainRetries,omitempty"`
+	EvictGracePeriod        int    `json:"evictGracePeriod,omitempty"`
+	WaitBetweenRotations    int    `json:"waitBetweenRotations,omitempty"`
+	WaitBetweenDrains       int    `json:"waitBetweenDrains,omitempty"`
+	WaitBetweenPodEvictions int    `json:"waitBetweenPodEvictions,omitempty"`
 }
 
 // NewRotateClusterRequestFromReader decodes the request and returns after validation and setting the defaults.
@@ -60,6 +61,10 @@ func (request *RotateClusterRequest) Validate() error {
 
 	if request.WaitBetweenDrains < 0 {
 		return errors.New("Wait between drains cannot be negative")
+	}
+
+	if request.WaitBetweenPodEvictions < 0 {
+		return errors.New("Wait between pod evictions cannot be negative")
 	}
 
 	return nil

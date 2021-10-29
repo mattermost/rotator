@@ -9,15 +9,16 @@ import (
 
 // Cluster represents a K8s cluster.
 type Cluster struct {
-	ClusterID            string
-	MaxScaling           int
-	RotateMasters        bool
-	RotateWorkers        bool
-	MaxDrainRetries      int
-	EvictGracePeriod     int
-	WaitBetweenRotations int
-	WaitBetweenDrains    int
-	ClientSet            *kubernetes.Clientset
+	ClusterID               string
+	MaxScaling              int
+	RotateMasters           bool
+	RotateWorkers           bool
+	MaxDrainRetries         int
+	EvictGracePeriod        int
+	WaitBetweenRotations    int
+	WaitBetweenDrains       int
+	WaitBetweenPodEvictions int
+	ClientSet               *kubernetes.Clientset
 }
 
 // ClusterFromReader decodes a json-encoded cluster from the given io.Reader.

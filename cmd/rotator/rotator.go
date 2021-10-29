@@ -20,6 +20,7 @@ func init() {
 	rotatorCmd.Flags().Int("evict-grace-period", 60, "the pod eviction grace period")
 	rotatorCmd.Flags().Int("wait-between-rotations", 60, "the time in seconds between each node rotation")
 	rotatorCmd.Flags().Int("wait-between-drains", 60, "the time in seconds between each node drain")
+	rotatorCmd.Flags().Int("wait-between-pod-evictions", 0, "the time in seconds between each pod eviction in a drain")
 
 	clusterCmd.AddCommand(rotatorCmd)
 }
@@ -51,16 +52,18 @@ var rotatorCmd = &cobra.Command{
 		evictGracePeriod, _ := command.Flags().GetInt("evict-grace-period")
 		waitBetweenRotations, _ := command.Flags().GetInt("wait-between-rotations")
 		waitBetweenDrains, _ := command.Flags().GetInt("wait-between-drains")
+		waitBetweenPodEvictions, _ := command.Flags().GetInt("wait-between-pod-evictions")
 
 		rotator, err := client.RotateCluster(&model.RotateClusterRequest{
-			ClusterID:            clusterID,
-			MaxScaling:           maxScaling,
-			RotateMasters:        rotateMasters,
-			RotateWorkers:        rotateWorkers,
-			MaxDrainRetries:      maxDrainRetries,
-			EvictGracePeriod:     evictGracePeriod,
-			WaitBetweenRotations: waitBetweenRotations,
-			WaitBetweenDrains:    waitBetweenDrains,
+			ClusterID:               clusterID,
+			MaxScaling:              maxScaling,
+			RotateMasters:           rotateMasters,
+			RotateWorkers:           rotateWorkers,
+			MaxDrainRetries:         maxDrainRetries,
+			EvictGracePeriod:        evictGracePeriod,
+			WaitBetweenRotations:    waitBetweenRotations,
+			WaitBetweenDrains:       waitBetweenDrains,
+			WaitBetweenPodEvictions: waitBetweenPodEvictions,
 		})
 		if err != nil {
 			return errors.Wrap(err, "failed to rotate nodes of the k8s cluster")

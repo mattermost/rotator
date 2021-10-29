@@ -47,14 +47,15 @@ func handleRotateCluster(c *Context, w http.ResponseWriter, r *http.Request) {
 	}
 
 	cluster := model.Cluster{
-		ClusterID:            rotateClusterRequest.ClusterID,
-		MaxScaling:           rotateClusterRequest.MaxScaling,
-		RotateMasters:        rotateClusterRequest.RotateMasters,
-		RotateWorkers:        rotateClusterRequest.RotateWorkers,
-		MaxDrainRetries:      rotateClusterRequest.MaxDrainRetries,
-		EvictGracePeriod:     rotateClusterRequest.EvictGracePeriod,
-		WaitBetweenRotations: rotateClusterRequest.WaitBetweenRotations,
-		WaitBetweenDrains:    rotateClusterRequest.WaitBetweenDrains,
+		ClusterID:               rotateClusterRequest.ClusterID,
+		MaxScaling:              rotateClusterRequest.MaxScaling,
+		RotateMasters:           rotateClusterRequest.RotateMasters,
+		RotateWorkers:           rotateClusterRequest.RotateWorkers,
+		MaxDrainRetries:         rotateClusterRequest.MaxDrainRetries,
+		EvictGracePeriod:        rotateClusterRequest.EvictGracePeriod,
+		WaitBetweenRotations:    rotateClusterRequest.WaitBetweenRotations,
+		WaitBetweenDrains:       rotateClusterRequest.WaitBetweenDrains,
+		WaitBetweenPodEvictions: rotateClusterRequest.WaitBetweenPodEvictions,
 	}
 
 	rotatorMetada := rotator.RotatorMetadata{}

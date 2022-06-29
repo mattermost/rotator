@@ -23,6 +23,10 @@ func initCluster(apiRouter *mux.Router, context *Context) {
 
 	clustersRouter := apiRouter.PathPrefix("/rotate").Subrouter()
 	clustersRouter.Handle("", addContext(handleRotateCluster)).Methods("POST")
+
+	nodeRouter := apiRouter.PathPrefix("/drain").Subrouter()
+	nodeRouter.Handle("", addContext(handleDrainNode)).Methods("POST")
+
 }
 
 // handleRotateCluster responds to POST /api/rotate, beginning the process of rotating a k8s cluster.
@@ -65,4 +69,27 @@ func handleRotateCluster(c *Context, w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusAccepted)
 	outputJSON(c, w, cluster)
+}
+
+func handleDrainNode(c *Context, w http.ResponseWriter, r *http.Request) {
+
+	drainNodeRequest, err := model.NewDrainNodeRequestFromReader(r.Body)
+	if err != nil {
+		c.Logger.WithError(err).Error("failed to decode request")
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	node := model.NodeDrain{
+		NodeName:                drainNodeRequest.NodeName,
+		GracePeriod:             drainNodeRequest.GracePeriod,
+		MaxDrainRetries:         drainNodeRequest.MaxDrainRetries,
+		WaitBetweenPodEvictions: drainNodeRequest.WaitBetweenPodEvictions,
+	}
+
+	go rotator.InitDrainNode(&node, c.Logger.WithField("node", node.NodeName))
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusAccepted)
+	outputJSON(c, w, node)
 }

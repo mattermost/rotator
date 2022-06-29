@@ -8,10 +8,14 @@ import (
 	"strings"
 	"time"
 
+	k8sTools "github.com/mattermost/rotator/k8s"
+	"github.com/mattermost/rotator/model"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
@@ -105,6 +109,44 @@ const (
 	kUnmanagedFatal      = "Pods not managed by ReplicationController, ReplicaSet, Job, DaemonSet or StatefulSet (use Force to override)"
 	kUnmanagedWarning    = "Deleting pods not managed by ReplicationController, ReplicaSet, Job, DaemonSet or StatefulSet"
 )
+
+// InitDrainNode is used to call the Drain function.
+func InitDrainNode(nodeDrain *model.NodeDrain, logger *logrus.Entry) error {
+	ctx := context.TODO()
+
+	drainOptions := &DrainOptions{
+		DeleteLocalData:    true,
+		IgnoreDaemonsets:   true,
+		Timeout:            600,
+		GracePeriodSeconds: nodeDrain.GracePeriod,
+	}
+
+	clientSet, err := k8sTools.GetClientset()
+	if err != nil {
+		return err
+	}
+
+	logger.Infof("Draining node %s", nodeDrain.NodeName)
+
+	node, err := clientSet.CoreV1().Nodes().Get(ctx, nodeDrain.NodeName, metav1.GetOptions{})
+	if k8sErrors.IsNotFound(err) {
+		logger.Warnf("Node %s not found, assuming already drained", nodeDrain.NodeName)
+	} else if err != nil {
+		return errors.Wrapf(err, "Failed to get node %s", nodeDrain.NodeName)
+	} else {
+		err = Drain(clientSet, []*corev1.Node{node}, drainOptions, nodeDrain.WaitBetweenPodEvictions)
+		for i := 1; i < nodeDrain.MaxDrainRetries && err != nil; i++ {
+			logger.Warnf("Failed to drain node %q on attempt %d, retrying up to %d times", nodeDrain.NodeName, i, nodeDrain.MaxDrainRetries)
+			err = Drain(clientSet, []*corev1.Node{node}, drainOptions, nodeDrain.WaitBetweenPodEvictions)
+		}
+		if err != nil {
+			return errors.Wrapf(err, "Failed to drain node %s", nodeDrain.NodeName)
+		}
+		logger.Infof("Node %s drained successfully", nodeDrain.NodeName)
+	}
+
+	return nil
+}
 
 func Drain(client kubernetes.Interface, nodes []*corev1.Node, options *DrainOptions, waitBetweenPodEvictions int) error {
 	nodeInterface := client.CoreV1().Nodes()

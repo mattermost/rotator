@@ -11,6 +11,7 @@ require (
 	github.com/sirupsen/logrus v1.7.0
 	github.com/spf13/cobra v1.1.1
 	golang.org/x/oauth2 v0.0.0-20201208152858-08078c50e5b5 // indirect
+	golang.org/x/sys v0.0.0-20220627191245-f75cf1eec38b // indirect
 	golang.org/x/time v0.0.0-20201208040808-7e3f01d25324 // indirect
 	k8s.io/api v0.18.15
 	k8s.io/apimachinery v0.18.15

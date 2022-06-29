@@ -72,3 +72,20 @@ func (c *Client) RotateCluster(request *RotateClusterRequest) (*Cluster, error) 
 		return nil, errors.Errorf("failed with status code %d", resp.StatusCode)
 	}
 }
+
+// DrainNode requests the drain of a K8s cluster node from the rotator server.
+func (c *Client) DrainNode(request *DrainNodeRequest) (*NodeDrain, error) {
+	resp, err := c.doPost(c.buildURL("/api/drain"), request)
+	if err != nil {
+		return nil, err
+	}
+	defer closeBody(resp)
+
+	switch resp.StatusCode {
+	case http.StatusAccepted:
+		return NodeDrainFromReader(resp.Body)
+
+	default:
+		return nil, errors.Errorf("failed with status code %d", resp.StatusCode)
+	}
+}

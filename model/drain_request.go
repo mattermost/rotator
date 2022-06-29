@@ -28,7 +28,7 @@ func NewDrainNodeRequestFromReader(reader io.Reader) (*DrainNodeRequest, error) 
 
 	err = drainNodeRequest.Validate()
 	if err != nil {
-		return nil, errors.Wrap(err, "rotate cluster request failed validation")
+		return nil, errors.Wrap(err, "drain cluster request failed validation")
 	}
 	drainNodeRequest.SetDefaults()
 

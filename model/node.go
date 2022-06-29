@@ -11,6 +11,9 @@ type NodeDrain struct {
 	GracePeriod             int
 	WaitBetweenPodEvictions int
 	MaxDrainRetries         int
+	DetachNode              bool
+	TerminateNode           bool
+	ClusterID               string
 }
 
 // NodeFromReader decodes a json-encoded node from the given io.Reader.

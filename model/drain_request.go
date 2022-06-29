@@ -13,6 +13,9 @@ type DrainNodeRequest struct {
 	GracePeriod             int    `json:"gracePeriod,omitempty"`
 	MaxDrainRetries         int    `json:"maxDrainRetries,omitempty"`
 	WaitBetweenPodEvictions int    `json:"waitBetweenPodEvictions,omitempty"`
+	DetachNode              bool   `json:"detachNode,omitempty"`
+	TerminateNode           bool   `json:"terminateNode,omitempty"`
+	ClusterID               string `json:"clusterID,omitempty"`
 }
 
 // NewDrainNodeRequestFromReader decodes the request and returns after validation and setting the defaults.

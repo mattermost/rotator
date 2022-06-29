@@ -85,6 +85,9 @@ func handleDrainNode(c *Context, w http.ResponseWriter, r *http.Request) {
 		GracePeriod:             drainNodeRequest.GracePeriod,
 		MaxDrainRetries:         drainNodeRequest.MaxDrainRetries,
 		WaitBetweenPodEvictions: drainNodeRequest.WaitBetweenPodEvictions,
+		DetachNode:              drainNodeRequest.DetachNode,
+		TerminateNode:           drainNodeRequest.TerminateNode,
+		ClusterID:               drainNodeRequest.ClusterID,
 	}
 
 	go rotator.InitDrainNode(&node, c.Logger.WithField("node", node.NodeName))

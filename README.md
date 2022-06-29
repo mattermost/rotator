@@ -74,7 +74,7 @@ rotator cluster rotate --cluster <cluster_id> --rotate-workers --rotate-masters 
 
 You will get a response like this one:
 ```bash
-[{
+{
     "ClusterID": "<cluster_id>",
     "MaxScaling": 4,
     "RotateMasters": true,
@@ -87,6 +87,26 @@ You will get a response like this one:
     "ClientSet": null
 }
 ```
+
+In a different terminal/window, to drain a node:
+```bash
+rotator drain --node <node_name> --detach --cluster <cluster_id> --terminate --wait-between-pod-evictions 2 --evict-grace-period 60 --max-drain-retries 10
+```
+
+You will get a response like this one:
+```bash
+{
+    "NodeName": "<node_name>",
+    "GracePeriod": 60,
+    "WaitBetweenPodEvictions": 2,
+    "MaxDrainRetries": 10,
+    "DetachNode": true,
+    "TerminateNode": true,
+    "ClusterID": "<cluster_id"
+}
+```
+
+The detach and terminate node options are optional during a drain operation. When set to true the `--cluster` flag is required.
 
 ### Other Setup
 

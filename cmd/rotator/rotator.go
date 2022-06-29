@@ -26,6 +26,9 @@ func init() {
 	drainCmd.Flags().Int("evict-grace-period", 60, "the pod eviction grace period")
 	drainCmd.Flags().Int("wait-between-pod-evictions", 2, "the time in seconds between each pod eviction in a drain")
 	drainCmd.Flags().Int("max-drain-retries", 10, "the max number of retries when drain fails")
+	drainCmd.Flags().Bool("detach", false, "whether to detach the node from its autoscaling group")
+	drainCmd.Flags().Bool("terminate", false, "whether to terminate the node")
+	drainCmd.Flags().String("cluster", "", "the cluster ID of the cluster to that the node will be drained. Needed when detach is required")
 
 	drainCmd.MarkFlagRequired("node") //nolint
 
@@ -51,12 +54,18 @@ var drainCmd = &cobra.Command{
 		gracePeriod, _ := command.Flags().GetInt("evict-grace-period")
 		waitBetweenPodEvictions, _ := command.Flags().GetInt("wait-between-pod-evictions")
 		maxDrainRetries, _ := command.Flags().GetInt("max-drain-retries")
+		detachNode, _ := command.Flags().GetBool("detach")
+		terminateNode, _ := command.Flags().GetBool("terminate")
+		clusterID, _ := command.Flags().GetString("cluster")
 
 		drain, err := client.DrainNode(&model.DrainNodeRequest{
 			NodeName:                nodeName,
 			GracePeriod:             gracePeriod,
 			WaitBetweenPodEvictions: waitBetweenPodEvictions,
 			MaxDrainRetries:         maxDrainRetries,
+			DetachNode:              detachNode,
+			TerminateNode:           terminateNode,
+			ClusterID:               clusterID,
 		})
 		if err != nil {
 			return errors.Wrap(err, "failed to drain node")

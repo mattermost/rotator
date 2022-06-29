@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	awsTools "github.com/mattermost/rotator/aws"
 	k8sTools "github.com/mattermost/rotator/k8s"
 	"github.com/mattermost/rotator/model"
 	"github.com/pkg/errors"
@@ -126,6 +127,37 @@ func InitDrainNode(nodeDrain *model.NodeDrain, logger *logrus.Entry) error {
 		return err
 	}
 
+	if nodeDrain.DetachNode {
+		asgs, err := awsTools.GetAutoscalingGroups(nodeDrain.ClusterID)
+		if err != nil {
+			return errors.Wrapf(err, "Failed to get autoscaling groups for cluster %s", nodeDrain.ClusterID)
+		}
+		instanceID, err := awsTools.GetInstanceID(nodeDrain.NodeName, logger)
+		var nodeFound bool
+		for _, asg := range asgs {
+			nodeInGroup, err := awsTools.NodeInAutoscalingGroup(*asg.AutoScalingGroupName, instanceID)
+			if err != nil {
+				return errors.Wrapf(err, "Failed to check if node %s belongs in autoscaling group %s", nodeDrain.NodeName, *asg.AutoScalingGroupName)
+			}
+			if nodeInGroup {
+				nodeFound = true
+				logger.Infof("Node %s is in autoscaling group %s", nodeDrain.NodeName, *asg.AutoScalingGroupName)
+				logger.Infof("Detaching node %s from autoscaling group %s", nodeDrain.NodeName, *asg.AutoScalingGroupName)
+				err = awsTools.DetachNodes(false, []string{nodeDrain.NodeName}, *asg.AutoScalingGroupName, logger)
+				if err != nil {
+					return errors.Wrapf(err, "Failed to detach node %s from autoscaling group %s", nodeDrain.NodeName, *asg.AutoScalingGroupName)
+				}
+				logger.Infof("Detaching node %s from autoscaling group %s successful", nodeDrain.NodeName, *asg.AutoScalingGroupName)
+			}
+		}
+		if !nodeFound {
+			logger.Infof("Node %s not found in any autoscaling group, assuming it is detached...", nodeDrain.NodeName)
+		}
+
+		logger.Info("Sleeping 60 seconds for autoscaling group to balance...")
+		time.Sleep(60 * time.Second)
+	}
+
 	logger.Infof("Draining node %s", nodeDrain.NodeName)
 
 	node, err := clientSet.CoreV1().Nodes().Get(ctx, nodeDrain.NodeName, metav1.GetOptions{})
@@ -143,6 +175,25 @@ func InitDrainNode(nodeDrain *model.NodeDrain, logger *logrus.Entry) error {
 			return errors.Wrapf(err, "Failed to drain node %s", nodeDrain.NodeName)
 		}
 		logger.Infof("Node %s drained successfully", nodeDrain.NodeName)
+	}
+
+	if nodeDrain.TerminateNode {
+		logger.Infof("Terminating node %s ", nodeDrain.NodeName)
+		err := awsTools.TerminateNodes([]string{nodeDrain.NodeName}, logger)
+		if err != nil {
+			return errors.Wrapf(err, "Failed to terminate node %s", nodeDrain.NodeName)
+		}
+		logger.Infof("Terminating node %s successful", nodeDrain.NodeName)
+
+		logger.Infof("Removing node %s from k8s", nodeDrain.NodeName)
+
+		err = k8sTools.DeleteClusterNodes([]string{nodeDrain.NodeName}, clientSet, logger)
+		if err != nil {
+			return err
+		}
+
+		logger.Infof("Removing node %s from k8s successful", nodeDrain.NodeName)
+		logger.Info("Drain operation complete")
 	}
 
 	return nil

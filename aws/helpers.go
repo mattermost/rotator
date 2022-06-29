@@ -178,6 +178,10 @@ func AutoScalingGroupReady(autoscalingGroupName string, desiredCapacity int, log
 	}
 }
 
+func NodeInAutoscalingGroup(autoscalingGroupName, instanceID string) (bool, error) {
+	return nodeInAutoscalingGroup(autoscalingGroupName, instanceID)
+}
+
 // nodeInAutoscalingGroup checks if an instance is member of an Autoscaling Group.
 func nodeInAutoscalingGroup(autoscalingGroupName, instanceID string) (bool, error) {
 	svc := autoscaling.New(session.New())

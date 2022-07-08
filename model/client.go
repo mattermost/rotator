@@ -64,13 +64,11 @@ func (c *Client) RotateCluster(request *RotateClusterRequest) (*Cluster, error) 
 	}
 	defer closeBody(resp)
 
-	switch resp.StatusCode {
-	case http.StatusAccepted:
+	if resp.StatusCode == http.StatusAccepted {
 		return ClusterFromReader(resp.Body)
-
-	default:
-		return nil, errors.Errorf("failed with status code %d", resp.StatusCode)
 	}
+
+	return nil, errors.Errorf("failed with status code %d", resp.StatusCode)
 }
 
 // DrainNode requests the drain of a K8s cluster node from the rotator server.
@@ -81,11 +79,9 @@ func (c *Client) DrainNode(request *DrainNodeRequest) (*NodeDrain, error) {
 	}
 	defer closeBody(resp)
 
-	switch resp.StatusCode {
-	case http.StatusAccepted:
+	if resp.StatusCode == http.StatusAccepted {
 		return NodeDrainFromReader(resp.Body)
-
-	default:
-		return nil, errors.Errorf("failed with status code %d", resp.StatusCode)
 	}
+
+	return nil, errors.Errorf("failed with status code %d", resp.StatusCode)
 }

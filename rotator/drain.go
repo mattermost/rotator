@@ -174,7 +174,7 @@ func InitDrainNode(nodeDrain *model.NodeDrain, logger *logrus.Entry) error {
 		if err != nil {
 			return errors.Wrapf(err, "Failed to drain node %s", nodeDrain.NodeName)
 		}
-		logger.Infof("Node %s drained successfully", nodeDrain.NodeName)
+		logger.Infof("Node %s drained", nodeDrain.NodeName)
 	}
 
 	if nodeDrain.TerminateNode {
@@ -183,7 +183,7 @@ func InitDrainNode(nodeDrain *model.NodeDrain, logger *logrus.Entry) error {
 		if err != nil {
 			return errors.Wrapf(err, "Failed to terminate node %s", nodeDrain.NodeName)
 		}
-		logger.Infof("Terminating node %s successful", nodeDrain.NodeName)
+		logger.Infof("Node %s terminated", nodeDrain.NodeName)
 
 		logger.Infof("Removing node %s from k8s", nodeDrain.NodeName)
 
@@ -192,8 +192,8 @@ func InitDrainNode(nodeDrain *model.NodeDrain, logger *logrus.Entry) error {
 			return err
 		}
 
-		logger.Infof("Removing node %s from k8s successful", nodeDrain.NodeName)
-		logger.Info("Drain operation complete")
+		logger.Infof("Node %s removed from k8s", nodeDrain.NodeName)
+		logger.Info("Drain operation completed")
 	}
 
 	return nil

@@ -8,10 +8,15 @@ import (
 	"strings"
 	"time"
 
+	awsTools "github.com/mattermost/rotator/aws"
+	k8sTools "github.com/mattermost/rotator/k8s"
+	"github.com/mattermost/rotator/model"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
@@ -105,6 +110,94 @@ const (
 	kUnmanagedFatal      = "Pods not managed by ReplicationController, ReplicaSet, Job, DaemonSet or StatefulSet (use Force to override)"
 	kUnmanagedWarning    = "Deleting pods not managed by ReplicationController, ReplicaSet, Job, DaemonSet or StatefulSet"
 )
+
+// InitDrainNode is used to call the Drain function.
+func InitDrainNode(nodeDrain *model.NodeDrain, logger *logrus.Entry) error {
+	ctx := context.TODO()
+
+	drainOptions := &DrainOptions{
+		DeleteLocalData:    true,
+		IgnoreDaemonsets:   true,
+		Timeout:            600,
+		GracePeriodSeconds: nodeDrain.GracePeriod,
+	}
+
+	clientSet, err := k8sTools.GetClientset()
+	if err != nil {
+		return err
+	}
+
+	if nodeDrain.DetachNode {
+		asgs, err := awsTools.GetAutoscalingGroups(nodeDrain.ClusterID)
+		if err != nil {
+			return errors.Wrapf(err, "Failed to get autoscaling groups for cluster %s", nodeDrain.ClusterID)
+		}
+		instanceID, err := awsTools.GetInstanceID(nodeDrain.NodeName, logger)
+		var nodeFound bool
+		for _, asg := range asgs {
+			nodeInGroup, err := awsTools.NodeInAutoscalingGroup(*asg.AutoScalingGroupName, instanceID)
+			if err != nil {
+				return errors.Wrapf(err, "Failed to check if node %s belongs in autoscaling group %s", nodeDrain.NodeName, *asg.AutoScalingGroupName)
+			}
+			if nodeInGroup {
+				nodeFound = true
+				logger.Infof("Node %s is in autoscaling group %s", nodeDrain.NodeName, *asg.AutoScalingGroupName)
+				logger.Infof("Detaching node %s from autoscaling group %s", nodeDrain.NodeName, *asg.AutoScalingGroupName)
+				err = awsTools.DetachNodes(false, []string{nodeDrain.NodeName}, *asg.AutoScalingGroupName, logger)
+				if err != nil {
+					return errors.Wrapf(err, "Failed to detach node %s from autoscaling group %s", nodeDrain.NodeName, *asg.AutoScalingGroupName)
+				}
+				logger.Infof("Detaching node %s from autoscaling group %s successful", nodeDrain.NodeName, *asg.AutoScalingGroupName)
+			}
+		}
+		if !nodeFound {
+			logger.Infof("Node %s not found in any autoscaling group, assuming it is detached...", nodeDrain.NodeName)
+		}
+
+		logger.Info("Sleeping 60 seconds for autoscaling group to balance...")
+		time.Sleep(60 * time.Second)
+	}
+
+	logger.Infof("Draining node %s", nodeDrain.NodeName)
+
+	node, err := clientSet.CoreV1().Nodes().Get(ctx, nodeDrain.NodeName, metav1.GetOptions{})
+	if k8sErrors.IsNotFound(err) {
+		logger.Warnf("Node %s not found, assuming already drained", nodeDrain.NodeName)
+	} else if err != nil {
+		return errors.Wrapf(err, "Failed to get node %s", nodeDrain.NodeName)
+	} else {
+		err = Drain(clientSet, []*corev1.Node{node}, drainOptions, nodeDrain.WaitBetweenPodEvictions)
+		for i := 1; i < nodeDrain.MaxDrainRetries && err != nil; i++ {
+			logger.Warnf("Failed to drain node %q on attempt %d, retrying up to %d times", nodeDrain.NodeName, i, nodeDrain.MaxDrainRetries)
+			err = Drain(clientSet, []*corev1.Node{node}, drainOptions, nodeDrain.WaitBetweenPodEvictions)
+		}
+		if err != nil {
+			return errors.Wrapf(err, "Failed to drain node %s", nodeDrain.NodeName)
+		}
+		logger.Infof("Node %s drained", nodeDrain.NodeName)
+	}
+
+	if nodeDrain.TerminateNode {
+		logger.Infof("Terminating node %s ", nodeDrain.NodeName)
+		err := awsTools.TerminateNodes([]string{nodeDrain.NodeName}, logger)
+		if err != nil {
+			return errors.Wrapf(err, "Failed to terminate node %s", nodeDrain.NodeName)
+		}
+		logger.Infof("Node %s terminated", nodeDrain.NodeName)
+
+		logger.Infof("Removing node %s from k8s", nodeDrain.NodeName)
+
+		err = k8sTools.DeleteClusterNodes([]string{nodeDrain.NodeName}, clientSet, logger)
+		if err != nil {
+			return err
+		}
+
+		logger.Infof("Node %s removed from k8s", nodeDrain.NodeName)
+		logger.Info("Drain operation completed")
+	}
+
+	return nil
+}
 
 func Drain(client kubernetes.Interface, nodes []*corev1.Node, options *DrainOptions, waitBetweenPodEvictions int) error {
 	nodeInterface := client.CoreV1().Nodes()

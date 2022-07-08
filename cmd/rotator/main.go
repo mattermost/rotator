@@ -20,7 +20,7 @@ var rootCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(serverCmd)
 	rootCmd.AddCommand(clusterCmd)
-	rootCmd.AddCommand(nodeCmd)
+	rootCmd.AddCommand(drainCmd)
 }
 
 func main() {

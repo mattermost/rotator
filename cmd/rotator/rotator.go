@@ -22,7 +22,18 @@ func init() {
 	rotatorCmd.Flags().Int("wait-between-drains", 60, "the time in seconds between each node drain")
 	rotatorCmd.Flags().Int("wait-between-pod-evictions", 0, "the time in seconds between each pod eviction in a drain")
 
+	drainCmd.Flags().String("node", "", "the name of the node to do drain operations")
+	drainCmd.Flags().Int("evict-grace-period", 60, "the pod eviction grace period")
+	drainCmd.Flags().Int("wait-between-pod-evictions", 2, "the time in seconds between each pod eviction in a drain")
+	drainCmd.Flags().Int("max-drain-retries", 10, "the max number of retries when drain fails")
+	drainCmd.Flags().Bool("detach", false, "whether to detach the node from its autoscaling group")
+	drainCmd.Flags().Bool("terminate", false, "whether to terminate the node")
+	drainCmd.Flags().String("cluster", "", "the cluster ID of the cluster to that the node will be drained. Needed when detach is required")
+
+	drainCmd.MarkFlagRequired("node") //nolint
+
 	clusterCmd.AddCommand(rotatorCmd)
+	clusterCmd.AddCommand(drainCmd)
 }
 
 var clusterCmd = &cobra.Command{
@@ -31,9 +42,41 @@ var clusterCmd = &cobra.Command{
 }
 
 // TODO: Add node handling capabilities
-var nodeCmd = &cobra.Command{
-	Use:   "node",
-	Short: "Handle node changees, drain, detach, terminate, etc.",
+var drainCmd = &cobra.Command{
+	Use:   "drain",
+	Short: "Handle node drain.",
+	RunE: func(command *cobra.Command, args []string) error {
+		command.SilenceUsage = true
+		serverAddress, _ := command.Flags().GetString("server")
+		client := model.NewClient(serverAddress)
+
+		nodeName, _ := command.Flags().GetString("node")
+		gracePeriod, _ := command.Flags().GetInt("evict-grace-period")
+		waitBetweenPodEvictions, _ := command.Flags().GetInt("wait-between-pod-evictions")
+		maxDrainRetries, _ := command.Flags().GetInt("max-drain-retries")
+		detachNode, _ := command.Flags().GetBool("detach")
+		terminateNode, _ := command.Flags().GetBool("terminate")
+		clusterID, _ := command.Flags().GetString("cluster")
+
+		drain, err := client.DrainNode(&model.DrainNodeRequest{
+			NodeName:                nodeName,
+			GracePeriod:             gracePeriod,
+			WaitBetweenPodEvictions: waitBetweenPodEvictions,
+			MaxDrainRetries:         maxDrainRetries,
+			DetachNode:              detachNode,
+			TerminateNode:           terminateNode,
+			ClusterID:               clusterID,
+		})
+		if err != nil {
+			return errors.Wrap(err, "failed to drain node")
+		}
+		err = printJSON(drain)
+		if err != nil {
+			return err
+		}
+
+		return nil
+	},
 }
 
 var rotatorCmd = &cobra.Command{

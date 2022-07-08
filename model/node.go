@@ -5,14 +5,20 @@ import (
 	"io"
 )
 
-// Node represents a K8s node.
-type Node struct {
-	NodeName string
+// NodeDrain represents a K8s node to be drained.
+type NodeDrain struct {
+	NodeName                string
+	GracePeriod             int
+	WaitBetweenPodEvictions int
+	MaxDrainRetries         int
+	DetachNode              bool
+	TerminateNode           bool
+	ClusterID               string
 }
 
 // NodeFromReader decodes a json-encoded node from the given io.Reader.
-func NodeFromReader(reader io.Reader) (*Node, error) {
-	node := Node{}
+func NodeDrainFromReader(reader io.Reader) (*NodeDrain, error) {
+	node := NodeDrain{}
 	decoder := json.NewDecoder(reader)
 	err := decoder.Decode(&node)
 	if err != nil && err != io.EOF {

@@ -1,6 +1,10 @@
+![Rotator_Logo](https://user-images.githubusercontent.com/7295363/200432961-38d285be-eb24-45fe-9c2f-ca29d098bfb6.png)
+
+> A tool meant to smooth and accelerate k8s cluster upgrades and node rotations.
+
 # Rotator
 
-Rotator is a tool meant to smooth and accelerate k8s cluster upgrades and node rotations. It offers automation on autoscaling group recognition and flexility on options such as, how fast to rotate nodes, drain retries, waiting time between rotations and drains as well as mater/worker node separation.
+Rotator offers automation on autoscaling group recognition and flexility on options such as, how fast to rotate nodes, drain retries, waiting time between rotations and drains as well as mater/worker node separation.
 
 ## How to use
 

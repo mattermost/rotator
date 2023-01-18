@@ -31,16 +31,17 @@ func initCluster(apiRouter *mux.Router, context *Context) {
 
 // handleRotateCluster responds to POST /api/rotate, beginning the process of rotating a k8s cluster.
 // sample body:
-// {
-//     "clusterID": "12345678",
-//     "maxScaling": 2,
-//     "rotateMasters":  true,
-//     "rotateWorkers": true,
-//     "maxDrainRetries": 10,
-//     "EvictGracePeriod": 60,
-//     "WaitBetweenRotations": 60,
-//     "WaitBetweenDrains": 60,
-// }
+//
+//	{
+//	    "clusterID": "12345678",
+//	    "maxScaling": 2,
+//	    "rotateMasters":  true,
+//	    "rotateWorkers": true,
+//	    "maxDrainRetries": 10,
+//	    "EvictGracePeriod": 60,
+//	    "WaitBetweenRotations": 60,
+//	    "WaitBetweenDrains": 60,
+//	}
 func handleRotateCluster(c *Context, w http.ResponseWriter, r *http.Request) {
 
 	rotateClusterRequest, err := model.NewRotateClusterRequestFromReader(r.Body)

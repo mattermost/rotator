@@ -166,10 +166,10 @@ func InitDrainNode(nodeDrain *model.NodeDrain, logger *logrus.Entry) error {
 	} else if err != nil {
 		return errors.Wrapf(err, "Failed to get node %s", nodeDrain.NodeName)
 	} else {
-		err = Drain(clientSet, []*corev1.Node{node}, drainOptions, nodeDrain.WaitBetweenPodEvictions)
+		err = Drain(clientSet, []*corev1.Node{node}, drainOptions, nodeDrain.WaitBetweenPodEvictions, logger)
 		for i := 1; i < nodeDrain.MaxDrainRetries && err != nil; i++ {
 			logger.Warnf("Failed to drain node %q on attempt %d, retrying up to %d times", nodeDrain.NodeName, i, nodeDrain.MaxDrainRetries)
-			err = Drain(clientSet, []*corev1.Node{node}, drainOptions, nodeDrain.WaitBetweenPodEvictions)
+			err = Drain(clientSet, []*corev1.Node{node}, drainOptions, nodeDrain.WaitBetweenPodEvictions, logger)
 		}
 		if err != nil {
 			return errors.Wrapf(err, "Failed to drain node %s", nodeDrain.NodeName)
@@ -199,10 +199,10 @@ func InitDrainNode(nodeDrain *model.NodeDrain, logger *logrus.Entry) error {
 	return nil
 }
 
-func Drain(client kubernetes.Interface, nodes []*corev1.Node, options *DrainOptions, waitBetweenPodEvictions int) error {
+func Drain(client kubernetes.Interface, nodes []*corev1.Node, options *DrainOptions, waitBetweenPodEvictions int, logger *logrus.Entry) error {
 	nodeInterface := client.CoreV1().Nodes()
 	for _, node := range nodes {
-		err := Cordon(nodeInterface, node)
+		err := Cordon(nodeInterface, node, logger)
 		if err != nil {
 			return err
 		}
@@ -212,7 +212,7 @@ func Drain(client kubernetes.Interface, nodes []*corev1.Node, options *DrainOpti
 	var fatal error
 
 	for _, node := range nodes {
-		err := DeleteOrEvictPods(client, node, options, waitBetweenPodEvictions)
+		err := DeleteOrEvictPods(client, node, options, waitBetweenPodEvictions, logger)
 		if err == nil {
 			drainedNodes.Insert(node.Name)
 			logger.Infof("Drained node %q", node.Name)
@@ -240,14 +240,14 @@ func Drain(client kubernetes.Interface, nodes []*corev1.Node, options *DrainOpti
 // DeleteOrEvictPods deletes or (where supported) evicts pods from the
 // target node and waits until the deletion/eviction completes,
 // Timeout elapses, or an error occurs.
-func DeleteOrEvictPods(client kubernetes.Interface, node *corev1.Node, options *DrainOptions, waitBetweenPodEvictions int) error {
-	pods, err := getPodsForDeletion(client, node, options)
+func DeleteOrEvictPods(client kubernetes.Interface, node *corev1.Node, options *DrainOptions, waitBetweenPodEvictions int, logger *logrus.Entry) error {
+	pods, err := getPodsForDeletion(client, node, options, logger)
 	if err != nil {
 		return err
 	}
-	err = deleteOrEvictPods(client, pods, options, waitBetweenPodEvictions)
+	err = deleteOrEvictPods(client, pods, options, waitBetweenPodEvictions, logger)
 	if err != nil {
-		pendingPods, newErr := getPodsForDeletion(client, node, options)
+		pendingPods, newErr := getPodsForDeletion(client, node, options, logger)
 		if newErr != nil {
 			return newErr
 		}
@@ -359,7 +359,7 @@ func (ps podStatuses) message() string {
 
 // getPodsForDeletion receives resource info for a node, and returns all the pods from the given node that we
 // are planning on deleting. If there are any pods preventing us from deleting, we return that list in an error.
-func getPodsForDeletion(client kubernetes.Interface, node *corev1.Node, options *DrainOptions) ([]corev1.Pod, error) {
+func getPodsForDeletion(client kubernetes.Interface, node *corev1.Node, options *DrainOptions, logger *logrus.Entry) ([]corev1.Pod, error) {
 	ctx := context.TODO()
 
 	listOptions := metav1.ListOptions{
@@ -440,7 +440,7 @@ func evictPod(client typedpolicyv1beta1.PolicyV1beta1Interface, pod corev1.Pod, 
 }
 
 // deleteOrEvictPods deletes or evicts the pods on the api server
-func deleteOrEvictPods(client kubernetes.Interface, pods []corev1.Pod, options *DrainOptions, waitBetweenPodEvictions int) error {
+func deleteOrEvictPods(client kubernetes.Interface, pods []corev1.Pod, options *DrainOptions, waitBetweenPodEvictions int, logger *logrus.Entry) error {
 	ctx := context.TODO()
 
 	if len(pods) == 0 {
@@ -458,12 +458,12 @@ func deleteOrEvictPods(client kubernetes.Interface, pods []corev1.Pod, options *
 
 	if len(policyGroupVersion) > 0 {
 		// Remember to change change the URL manipulation func when Evction's version change
-		return evictPods(client.PolicyV1beta1(), pods, policyGroupVersion, options, getPodFn, waitBetweenPodEvictions)
+		return evictPods(client.PolicyV1beta1(), pods, policyGroupVersion, options, getPodFn, waitBetweenPodEvictions, logger)
 	}
 	return deletePods(client.CoreV1(), pods, options, getPodFn, waitBetweenPodEvictions)
 }
 
-func evictPods(client typedpolicyv1beta1.PolicyV1beta1Interface, pods []corev1.Pod, policyGroupVersion string, options *DrainOptions, getPodFn func(namespace, name string) (*corev1.Pod, error), waitBetweenPodEvictions int) error {
+func evictPods(client typedpolicyv1beta1.PolicyV1beta1Interface, pods []corev1.Pod, policyGroupVersion string, options *DrainOptions, getPodFn func(namespace, name string) (*corev1.Pod, error), waitBetweenPodEvictions int, logger *logrus.Entry) error {
 	returnCh := make(chan error, 1)
 	// 0 timeout means infinite, we use MaxInt64 to represent it.
 	var globalTimeout time.Duration
@@ -644,16 +644,16 @@ func SupportEviction(clientset kubernetes.Interface) (string, error) {
 }
 
 // Cordon marks a node "Unschedulable".  This method is idempotent.
-func Cordon(client typedcorev1.NodeInterface, node *corev1.Node) error {
-	return cordonOrUncordon(client, node, true)
+func Cordon(client typedcorev1.NodeInterface, node *corev1.Node, logger *logrus.Entry) error {
+	return cordonOrUncordon(client, node, true, logger)
 }
 
 // Uncordon marks a node "Schedulable".  This method is idempotent.
-func Uncordon(client typedcorev1.NodeInterface, node *corev1.Node) error {
-	return cordonOrUncordon(client, node, false)
+func Uncordon(client typedcorev1.NodeInterface, node *corev1.Node, logger *logrus.Entry) error {
+	return cordonOrUncordon(client, node, false, logger)
 }
 
-func cordonOrUncordon(client typedcorev1.NodeInterface, node *corev1.Node, desired bool) error {
+func cordonOrUncordon(client typedcorev1.NodeInterface, node *corev1.Node, desired bool, logger *logrus.Entry) error {
 	ctx := context.TODO()
 
 	unsched := node.Spec.Unschedulable

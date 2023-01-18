@@ -60,7 +60,6 @@ func (autoscalingGroup *AutoscalingGroup) popNodes(popNodes []string) {
 		}
 	}
 	autoscalingGroup.Nodes = updatedList
-	return
 }
 
 // DrainNodes covers all node drain actions.
@@ -87,10 +86,10 @@ func (autoscalingGroup *AutoscalingGroup) DrainNodes(nodesToDrain []string, atte
 		} else if err != nil {
 			return errors.Wrapf(err, "Failed to get node %s", nodeToDrain)
 		} else {
-			err = Drain(clientset, []*corev1.Node{node}, drainOptions, waitBetweenPodEvictions)
+			err = Drain(clientset, []*corev1.Node{node}, drainOptions, waitBetweenPodEvictions, logger)
 			for i := 1; i < attempts && err != nil; i++ {
 				logger.Warnf("Failed to drain node %q on attempt %d, retrying up to %d times", nodesToDrain, i, attempts)
-				err = Drain(clientset, []*corev1.Node{node}, drainOptions, waitBetweenPodEvictions)
+				err = Drain(clientset, []*corev1.Node{node}, drainOptions, waitBetweenPodEvictions, logger)
 			}
 			if err != nil {
 				return errors.Wrapf(err, "Failed to drain node %s", nodeToDrain)

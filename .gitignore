@@ -1,3 +1,5 @@
 coverage.out
 .vscode
 build/_output/
+.idea
+bin/

@@ -121,7 +121,7 @@ func MasterNodeRotation(cluster *model.Cluster, autoscalingGroup *AutoscalingGro
 
 		nodesToRotate := []string{autoscalingGroup.Nodes[0]}
 
-		err := autoscalingGroup.DrainNodes(nodesToRotate, 10, int(cluster.EvictGracePeriod), cluster.WaitBetweenDrains, cluster.WaitBetweenPodEvictions, clientset, logger, "master")
+		err := autoscalingGroup.DrainNodes(nodesToRotate, 10, cluster.EvictGracePeriod, cluster.WaitBetweenDrains, cluster.WaitBetweenPodEvictions, clientset, logger, "master")
 		if err != nil {
 			return err
 		}
@@ -171,10 +171,10 @@ func WorkerNodeRotation(cluster *model.Cluster, autoscalingGroup *AutoscalingGro
 
 		var nodesToRotate []string
 
-		if len(autoscalingGroup.Nodes) < int(cluster.MaxScaling) {
+		if len(autoscalingGroup.Nodes) < cluster.MaxScaling {
 			nodesToRotate = autoscalingGroup.Nodes
 		} else {
-			nodesToRotate = autoscalingGroup.Nodes[:int(cluster.MaxScaling)]
+			nodesToRotate = autoscalingGroup.Nodes[:cluster.MaxScaling]
 		}
 
 		err := awsTools.DetachNodes(false, nodesToRotate, autoscalingGroup.Name, logger)
@@ -202,7 +202,7 @@ func WorkerNodeRotation(cluster *model.Cluster, autoscalingGroup *AutoscalingGro
 			return err
 		}
 
-		err = autoscalingGroup.DrainNodes(nodesToRotate, 10, int(cluster.EvictGracePeriod), cluster.WaitBetweenDrains, cluster.WaitBetweenPodEvictions, clientset, logger, "worker")
+		err = autoscalingGroup.DrainNodes(nodesToRotate, 10, cluster.EvictGracePeriod, cluster.WaitBetweenDrains, cluster.WaitBetweenPodEvictions, clientset, logger, "worker")
 		if err != nil {
 			return err
 		}

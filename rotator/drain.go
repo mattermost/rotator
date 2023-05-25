@@ -23,7 +23,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/apimachinery/pkg/util/sets"
-	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 	typedappsv1 "k8s.io/client-go/kubernetes/typed/apps/v1"
 	typedcorev1 "k8s.io/client-go/kubernetes/typed/core/v1"
@@ -64,17 +63,6 @@ type DrainOptions struct {
 	// option is appropriate; examples include the Node is unready and the pods
 	// won't drain otherwise
 	SkipWaitForDeleteTimeoutSeconds int
-}
-
-type podDelete struct {
-	pod    corev1.Pod
-	status podDeleteStatus
-}
-
-type podDeleteStatus struct {
-	delete  bool
-	reason  string
-	message string
 }
 
 type waitForDeleteParams struct {
@@ -128,14 +116,19 @@ func InitDrainNode(nodeDrain *model.NodeDrain, logger *logrus.Entry) error {
 	}
 
 	if nodeDrain.DetachNode {
-		asgs, err := awsTools.GetAutoscalingGroups(nodeDrain.ClusterID)
-		if err != nil {
+		asgs, errASG := awsTools.GetAutoscalingGroups(nodeDrain.ClusterID)
+		if errASG != nil {
 			return errors.Wrapf(err, "Failed to get autoscaling groups for cluster %s", nodeDrain.ClusterID)
 		}
-		instanceID, err := awsTools.GetInstanceID(nodeDrain.NodeName, logger)
+		var instanceID string
+		instanceID, err = awsTools.GetInstanceID(nodeDrain.NodeName, logger)
+		if err != nil {
+			return errors.Wrapf(err, "Failed to get instance ID for node %s", nodeDrain.NodeName)
+		}
 		var nodeFound bool
+		var nodeInGroup bool
 		for _, asg := range asgs {
-			nodeInGroup, err := awsTools.NodeInAutoscalingGroup(*asg.AutoScalingGroupName, instanceID)
+			nodeInGroup, err = awsTools.NodeInAutoscalingGroup(*asg.AutoScalingGroupName, instanceID)
 			if err != nil {
 				return errors.Wrapf(err, "Failed to check if node %s belongs in autoscaling group %s", nodeDrain.NodeName, *asg.AutoScalingGroupName)
 			}
@@ -457,7 +450,7 @@ func deleteOrEvictPods(client kubernetes.Interface, pods []corev1.Pod, options *
 	}
 
 	if len(policyGroupVersion) > 0 {
-		// Remember to change change the URL manipulation func when Evction's version change
+		// Remember to change the URL manipulation func when Evction's version change
 		return evictPods(client.PolicyV1beta1(), pods, policyGroupVersion, options, getPodFn, waitBetweenPodEvictions, logger)
 	}
 	return deletePods(client.CoreV1(), pods, options, getPodFn, waitBetweenPodEvictions)
@@ -578,36 +571,36 @@ func DeletePod(client typedcorev1.CoreV1Interface, pod corev1.Pod) error {
 
 func waitForDelete(params waitForDeleteParams) ([]corev1.Pod, error) {
 	pods := params.pods
-	err := wait.PollImmediate(params.interval, params.timeout, func() (bool, error) {
-		pendingPods := []corev1.Pod{}
-		for i, pod := range pods {
-			p, err := params.getPodFn(pod.Namespace, pod.Name)
-			if apierrors.IsNotFound(err) || (p != nil && p.ObjectMeta.UID != pod.ObjectMeta.UID) {
-				if params.onDoneFn != nil {
-					params.onDoneFn(&pod, params.usingEviction)
+	timeout := time.After(params.timeout)
+	for {
+		select {
+		case <-timeout:
+			return pods, fmt.Errorf("Timeout reached: %v", params.timeout)
+		default:
+			pendingPods := []corev1.Pod{}
+			for i, pod := range pods {
+				p, err := params.getPodFn(pod.Namespace, pod.Name)
+				if apierrors.IsNotFound(err) || (p != nil && p.ObjectMeta.UID != pod.ObjectMeta.UID) {
+					if params.onDoneFn != nil {
+						params.onDoneFn(&pod, params.usingEviction)
+					}
+					continue
+				} else if err != nil {
+					return pods, err
+				} else {
+					// if shouldSkipPod(*p, params.skipWaitForDeleteTimeoutSeconds) {
+					// 	continue
+					// }
+					pendingPods = append(pendingPods, pods[i])
 				}
-				continue
-			} else if err != nil {
-				return false, err
-			} else {
-				// if shouldSkipPod(*p, params.skipWaitForDeleteTimeoutSeconds) {
-				// 	continue
-				// }
-				pendingPods = append(pendingPods, pods[i])
 			}
-		}
-		pods = pendingPods
-		if len(pendingPods) > 0 {
-			select {
-			case <-params.ctx.Done():
-				return false, fmt.Errorf("Global timeout reached: %v", params.globalTimeout)
-			default:
-				return false, nil
+			pods = pendingPods
+			if len(pendingPods) == 0 {
+				return pods, nil
 			}
+			time.Sleep(params.interval)
 		}
-		return true, nil
-	})
-	return pods, err
+	}
 }
 
 // SupportEviction uses Discovery API to find out if the server

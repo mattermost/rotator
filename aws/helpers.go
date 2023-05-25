@@ -14,7 +14,10 @@ import (
 
 // GetNodeHostnames returns the hostnames of the autoscaling group nodes.
 func GetNodeHostnames(autoscalingGroupNodes []*autoscaling.Instance) ([]string, error) {
-	svc := ec2.New(session.New())
+	sess := session.Must(session.NewSessionWithOptions(session.Options{
+		SharedConfigState: session.SharedConfigEnable,
+	}))
+	svc := ec2.New(sess)
 	var instanceHostnames []string
 	for _, node := range autoscalingGroupNodes {
 		resp, err := svc.DescribeInstances(&ec2.DescribeInstancesInput{
@@ -30,7 +33,10 @@ func GetNodeHostnames(autoscalingGroupNodes []*autoscaling.Instance) ([]string, 
 
 // GetInstanceID returns the instance ID of a node.
 func GetInstanceID(nodeName string, logger *logrus.Entry) (string, error) {
-	svc := ec2.New(session.New())
+	sess := session.Must(session.NewSessionWithOptions(session.Options{
+		SharedConfigState: session.SharedConfigEnable,
+	}))
+	svc := ec2.New(sess)
 	resp, err := svc.DescribeInstances(&ec2.DescribeInstancesInput{
 		Filters: []*ec2.Filter{
 			{
@@ -53,7 +59,10 @@ func GetInstanceID(nodeName string, logger *logrus.Entry) (string, error) {
 
 // DetachNodes detaches nodes from an autoscaling group.
 func DetachNodes(decrement bool, nodesToDetach []string, autoscalingGroupName string, logger *logrus.Entry) error {
-	asgSvc := autoscaling.New(session.New())
+	sess := session.Must(session.NewSessionWithOptions(session.Options{
+		SharedConfigState: session.SharedConfigEnable,
+	}))
+	asgSvc := autoscaling.New(sess)
 
 	for _, node := range nodesToDetach {
 		instanceID, err := GetInstanceID(node, logger)
@@ -104,7 +113,10 @@ func TerminateNodes(nodesToTerminate []string, logger *logrus.Entry) error {
 		}
 
 		logger.Infof("Terminating instance %s", instanceID)
-		ec2Svc := ec2.New(session.New())
+		sess := session.Must(session.NewSessionWithOptions(session.Options{
+			SharedConfigState: session.SharedConfigEnable,
+		}))
+		ec2Svc := ec2.New(sess)
 
 		_, err = ec2Svc.TerminateInstances(&ec2.TerminateInstancesInput{
 			InstanceIds: []*string{
@@ -121,7 +133,10 @@ func TerminateNodes(nodesToTerminate []string, logger *logrus.Entry) error {
 
 // GetAutoscalingGroups gets all the autoscaling groups that their names contain the cluster ID passed.
 func GetAutoscalingGroups(clusterID string) ([]*autoscaling.Group, error) {
-	svc := autoscaling.New(session.New())
+	sess := session.Must(session.NewSessionWithOptions(session.Options{
+		SharedConfigState: session.SharedConfigEnable,
+	}))
+	svc := autoscaling.New(sess)
 	var autoscalingGroups []*autoscaling.Group
 	var nextToken *string
 	for {
@@ -147,7 +162,10 @@ func GetAutoscalingGroups(clusterID string) ([]*autoscaling.Group, error) {
 
 // AutoScalingGroupReady gets an AutoscalingGroup object and checks that autoscaling group is in ready state.
 func AutoScalingGroupReady(autoscalingGroupName string, desiredCapacity int, logger *logrus.Entry) (*autoscaling.Group, error) {
-	svc := autoscaling.New(session.New())
+	sess := session.Must(session.NewSessionWithOptions(session.Options{
+		SharedConfigState: session.SharedConfigEnable,
+	}))
+	svc := autoscaling.New(sess)
 	timeout := 300
 	logger.Infof("Waiting up to %d seconds for autoscaling group %s to become ready...", timeout, autoscalingGroupName)
 
@@ -184,7 +202,10 @@ func NodeInAutoscalingGroup(autoscalingGroupName, instanceID string) (bool, erro
 
 // nodeInAutoscalingGroup checks if an instance is member of an Autoscaling Group.
 func nodeInAutoscalingGroup(autoscalingGroupName, instanceID string) (bool, error) {
-	svc := autoscaling.New(session.New())
+	sess := session.Must(session.NewSessionWithOptions(session.Options{
+		SharedConfigState: session.SharedConfigEnable,
+	}))
+	svc := autoscaling.New(sess)
 	resp, err := svc.DescribeAutoScalingGroups(&autoscaling.DescribeAutoScalingGroupsInput{
 		AutoScalingGroupNames: []*string{
 			aws.String(autoscalingGroupName),

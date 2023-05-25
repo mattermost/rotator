@@ -10,7 +10,7 @@ GO ?= $(shell command -v go 2> /dev/null)
 APP := rotator
 APPNAME := node-rotator
 ROTATOR_IMAGE ?= mattermost/node-rotator:test
-ROTATO_IMAGE_REPO ?=mattermost/node-rotator
+ROTATOR_IMAGE_REPO ?=mattermost/node-rotator
 TOOLS_BIN_DIR := $(abspath bin)
 GO_INSTALL = ./scripts/go_install.sh
 
@@ -75,9 +75,7 @@ scan:
 .PHONY: build-image
 build-image:  ## Build the docker image for rotator
 	@echo Building Rotator Docker Image
-	: $${DOCKER_USERNAME:?}
-	: $${DOCKER_PASSWORD:?}
-	echo $(DOCKER_PASSWORD) | docker login --username $(DOCKER_USERNAME) --password-stdin
+	echo $$DOCKERHUB_TOKEN | docker login --username $$DOCKERHUB_USERNAME --password-stdin && \
 	docker buildx build \
 	--platform linux/arm64,linux/amd64 \
 	--build-arg DOCKER_BUILD_IMAGE=$(DOCKER_BUILD_IMAGE) \
@@ -89,15 +87,13 @@ build-image:  ## Build the docker image for rotator
 .PHONY: build-image-with-tag
 build-image-with-tag:  ## Build the docker image for rotator
 	@echo Building Rotator Docker Image
-	: $${DOCKER_USERNAME:?}
-	: $${DOCKER_PASSWORD:?}
-	: $${TAG:?}
-	echo $(DOCKER_PASSWORD) | docker login --username $(DOCKER_USERNAME) --password-stdin
+	echo $$DOCKERHUB_TOKEN | docker login --username $$DOCKERHUB_USERNAME --password-stdin && \
 	docker buildx build \
 	--platform linux/arm64,linux/amd64 \
 	--build-arg DOCKER_BUILD_IMAGE=$(DOCKER_BUILD_IMAGE) \
 	--build-arg DOCKER_BASE_IMAGE=$(DOCKER_BASE_IMAGE) \
-	. -f build/Dockerfile -t $(ELROND_IMAGE) -t $(ELROND_IMAGE_REPO):${TAG} \
+	. -f build/Dockerfile -t $(ROTATOR_IMAGE) -t $(ROTATOR_IMAGE_REPO):${TAG} \
+	--no-cache \
 	--push
 
 .PHONY: push-image-pr

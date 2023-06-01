@@ -5,10 +5,8 @@ import (
 	"github.com/mattermost/rotator/aws"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
-	"github.com/Masterminds/semver/v3"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
@@ -51,18 +49,22 @@ func WaitForNodeRunning(ctx context.Context, nodeName string, clientset *kuberne
 		}
 		if k8sErrors.IsNotFound(err) {
 			privateIP, _ := aws.ExtractPrivateIP(nodeName)
+			logger.Infof(privateIP)
 			instanceID, _ := aws.GetInstanceIDByPrivateIP(privateIP)
+			logger.Infof(instanceID)
 			node, err := clientset.CoreV1().Nodes().Get(ctx, instanceID, metav1.GetOptions{})
 			if err == nil {
 				for _, condition := range node.Status.Conditions {
 					if condition.Reason == "KubeletReady" && condition.Status == corev1.ConditionTrue {
 						return node, nil
 					} else if condition.Reason == "KubeletReady" && condition.Status == corev1.ConditionFalse {
-						logger.Infof("Node %s found but not ready, waiting...", nodeName)
+						logger.Infof("Node %s found but not ready, waiting...", node.Name)
 					}
 				}
 			}
-			logger.Infof("Node %s not found, waiting...", nodeName)
+			logger.Infof("I got here...")
+			logger.Infof(node.Name)
+			logger.Infof("Node %s not found, waiting...", node.Name)
 		} else if err != nil {
 			logger.WithError(err).Errorf("Error while waiting for node %s to become ready...", nodeName)
 		}
@@ -106,30 +108,4 @@ func GetClientset() (*kubernetes.Clientset, error) {
 	}
 
 	return clientset, nil
-}
-
-// Helper function to extract the version of a node
-func GetNodeVersion(node *corev1.Node) string {
-	for _, condition := range node.Status.Conditions {
-		if condition.Type == corev1.NodeReady && condition.Status == corev1.ConditionTrue {
-			versionString := strings.TrimPrefix(condition.Message, "Kubelet is healthy: ")
-			return versionString
-		}
-	}
-	return ""
-}
-
-// Helper function to compare versions
-func CompareVersions(version1, version2 string) (int, error) {
-	v1, err := semver.NewVersion(version1)
-	if err != nil {
-		return 0, err
-	}
-
-	v2, err := semver.NewVersion(version2)
-	if err != nil {
-		return 0, err
-	}
-
-	return v1.Compare(v2), nil
 }

@@ -157,14 +157,14 @@ func InitDrainNode(nodeDrain *model.NodeDrain, logger *logrus.Entry) error {
 	if k8sErrors.IsNotFound(err) {
 		privateIP, _ := awsTools.ExtractPrivateIP(nodeDrain.NodeName)
 		instanceID, _ := awsTools.GetInstanceIDByPrivateIP(privateIP)
-		node, err := clientSet.CoreV1().Nodes().Get(ctx, instanceID, metav1.GetOptions{})
-		if err == nil {
-			for _, condition := range node.Status.Conditions {
+		node1, err1 := clientSet.CoreV1().Nodes().Get(ctx, instanceID, metav1.GetOptions{})
+		if err1 == nil {
+			for _, condition := range node1.Status.Conditions {
 				if condition.Reason == "KubeletReady" && condition.Status == corev1.ConditionTrue {
-					err = Drain(clientSet, []*corev1.Node{node}, drainOptions, nodeDrain.WaitBetweenPodEvictions, logger)
+					err = Drain(clientSet, []*corev1.Node{node1}, drainOptions, nodeDrain.WaitBetweenPodEvictions, logger)
 					for i := 1; i < nodeDrain.MaxDrainRetries && err != nil; i++ {
 						logger.Warnf("Failed to drain node %q on attempt %d, retrying up to %d times", nodeDrain.NodeName, i, nodeDrain.MaxDrainRetries)
-						err = Drain(clientSet, []*corev1.Node{node}, drainOptions, nodeDrain.WaitBetweenPodEvictions, logger)
+						err = Drain(clientSet, []*corev1.Node{node1}, drainOptions, nodeDrain.WaitBetweenPodEvictions, logger)
 					}
 					if err != nil {
 						return errors.Wrapf(err, "Failed to drain node %s", nodeDrain.NodeName)
@@ -190,7 +190,7 @@ func InitDrainNode(nodeDrain *model.NodeDrain, logger *logrus.Entry) error {
 						logger.Info("Drain operation completed")
 					}
 				} else if condition.Reason == "KubeletReady" && condition.Status == corev1.ConditionFalse {
-					logger.Infof("Node %s found but not ready, waiting...", node)
+					logger.Infof("Node %s found but not ready, waiting...", node1)
 				}
 			}
 		}

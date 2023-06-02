@@ -50,8 +50,8 @@ func WaitForNodeRunning(ctx context.Context, nodeName string, clientset *kuberne
 		if k8sErrors.IsNotFound(err) {
 			privateIP, _ := aws.ExtractPrivateIP(nodeName)
 			instanceID, _ := aws.GetInstanceIDByPrivateIP(privateIP)
-			node, err := clientset.CoreV1().Nodes().Get(ctx, instanceID, metav1.GetOptions{})
-			if err == nil {
+			node, err2 := clientset.CoreV1().Nodes().Get(ctx, instanceID, metav1.GetOptions{})
+			if err2 == nil {
 				for _, condition := range node.Status.Conditions {
 					if condition.Reason == "KubeletReady" && condition.Status == corev1.ConditionTrue {
 						return node, nil

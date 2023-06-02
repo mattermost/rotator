@@ -2,7 +2,7 @@
 # See LICENSE.txt for license information.
 
 ## Docker Build Versions
-DOCKER_BUILD_IMAGE = golang:1.19.9
+DOCKER_BUILD_IMAGE = golang:1.20
 DOCKER_BASE_IMAGE = alpine:3.18
 
 # Variables

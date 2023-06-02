@@ -1,6 +1,6 @@
 # Build the mattermost rotator
-ARG DOCKER_BUILD_IMAGE=golang:1.15.8
-ARG DOCKER_BASE_IMAGE=alpine:3.13
+ARG DOCKER_BUILD_IMAGE=golang:1.20
+ARG DOCKER_BASE_IMAGE=alpine:3.18
 
 FROM ${DOCKER_BUILD_IMAGE} AS build
 WORKDIR /rotator/

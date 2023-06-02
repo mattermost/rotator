@@ -2,6 +2,7 @@ package k8s
 
 import (
 	"context"
+	"github.com/mattermost/rotator/aws"
 	"os"
 	"path/filepath"
 	"time"
@@ -21,7 +22,7 @@ func NodesReady(nodes []string, clientset *kubernetes.Clientset, logger *logrus.
 	for _, node := range nodes {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(wait)*time.Second)
 		defer cancel()
-		node, err := WaitForNodeRunning(ctx, node, clientset, logger)
+		_, err := WaitForNodeRunning(ctx, node, clientset, logger)
 		if err != nil {
 			return errors.Wrapf(err, "Node %s failed to get ready", node)
 		}
@@ -47,7 +48,19 @@ func WaitForNodeRunning(ctx context.Context, nodeName string, clientset *kuberne
 			}
 		}
 		if k8sErrors.IsNotFound(err) {
-			logger.Infof("Node %s not found, waiting...", nodeName)
+			privateIP, _ := aws.ExtractPrivateIP(nodeName)
+			instanceID, _ := aws.GetInstanceIDByPrivateIP(privateIP)
+			node, err2 := clientset.CoreV1().Nodes().Get(ctx, instanceID, metav1.GetOptions{})
+			if err2 == nil {
+				for _, condition := range node.Status.Conditions {
+					if condition.Reason == "KubeletReady" && condition.Status == corev1.ConditionTrue {
+						return node, nil
+					} else if condition.Reason == "KubeletReady" && condition.Status == corev1.ConditionFalse {
+						logger.Infof("Node %s found but not ready, waiting...", node.Name)
+					}
+				}
+			}
+			logger.Infof("Node %s not found, waiting...", node.Name)
 		} else if err != nil {
 			logger.WithError(err).Errorf("Error while waiting for node %s to become ready...", nodeName)
 		}

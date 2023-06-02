@@ -155,6 +155,45 @@ func InitDrainNode(nodeDrain *model.NodeDrain, logger *logrus.Entry) error {
 
 	node, err := clientSet.CoreV1().Nodes().Get(ctx, nodeDrain.NodeName, metav1.GetOptions{})
 	if k8sErrors.IsNotFound(err) {
+		privateIP, _ := awsTools.ExtractPrivateIP(nodeDrain.NodeName)
+		instanceID, _ := awsTools.GetInstanceIDByPrivateIP(privateIP)
+		node1, err1 := clientSet.CoreV1().Nodes().Get(ctx, instanceID, metav1.GetOptions{})
+		if err1 == nil {
+			for _, condition := range node1.Status.Conditions {
+				if condition.Reason == "KubeletReady" && condition.Status == corev1.ConditionTrue {
+					err = Drain(clientSet, []*corev1.Node{node1}, drainOptions, nodeDrain.WaitBetweenPodEvictions, logger)
+					for i := 1; i < nodeDrain.MaxDrainRetries && err != nil; i++ {
+						logger.Warnf("Failed to drain node %q on attempt %d, retrying up to %d times", nodeDrain.NodeName, i, nodeDrain.MaxDrainRetries)
+						err = Drain(clientSet, []*corev1.Node{node1}, drainOptions, nodeDrain.WaitBetweenPodEvictions, logger)
+					}
+					if err != nil {
+						return errors.Wrapf(err, "Failed to drain node %s", nodeDrain.NodeName)
+					}
+					logger.Infof("Node %s drained", nodeDrain.NodeName)
+
+					if nodeDrain.TerminateNode {
+						logger.Infof("Terminating node %s ", nodeDrain.NodeName)
+						err2 := awsTools.TerminateNodes([]string{nodeDrain.NodeName}, logger)
+						if err2 != nil {
+							return errors.Wrapf(err2, "Failed to terminate node %s", nodeDrain.NodeName)
+						}
+						logger.Infof("Node %s terminated", nodeDrain.NodeName)
+
+						logger.Infof("Removing node %s from k8s", nodeDrain.NodeName)
+
+						err = k8sTools.DeleteClusterNodes([]string{nodeDrain.NodeName}, clientSet, logger)
+						if err != nil {
+							return err
+						}
+
+						logger.Infof("Node %s removed from k8s", nodeDrain.NodeName)
+						logger.Info("Drain operation completed")
+					}
+				} else if condition.Reason == "KubeletReady" && condition.Status == corev1.ConditionFalse {
+					logger.Infof("Node %s found but not ready, waiting...", node1)
+				}
+			}
+		}
 		logger.Warnf("Node %s not found, assuming already drained", nodeDrain.NodeName)
 	} else if err != nil {
 		return errors.Wrapf(err, "Failed to get node %s", nodeDrain.NodeName)
@@ -172,9 +211,9 @@ func InitDrainNode(nodeDrain *model.NodeDrain, logger *logrus.Entry) error {
 
 	if nodeDrain.TerminateNode {
 		logger.Infof("Terminating node %s ", nodeDrain.NodeName)
-		err := awsTools.TerminateNodes([]string{nodeDrain.NodeName}, logger)
-		if err != nil {
-			return errors.Wrapf(err, "Failed to terminate node %s", nodeDrain.NodeName)
+		err3 := awsTools.TerminateNodes([]string{nodeDrain.NodeName}, logger)
+		if err3 != nil {
+			return errors.Wrapf(err3, "Failed to terminate node %s", nodeDrain.NodeName)
 		}
 		logger.Infof("Node %s terminated", nodeDrain.NodeName)
 

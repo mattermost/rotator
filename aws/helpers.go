@@ -1,6 +1,8 @@
 package aws
 
 import (
+	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -221,4 +223,52 @@ func nodeInAutoscalingGroup(autoscalingGroupName, instanceID string) (bool, erro
 		}
 	}
 	return false, nil
+}
+
+func GetInstanceIDByPrivateIP(privateIP string) (string, error) {
+	// Create a new AWS session
+	sess := session.Must(session.NewSessionWithOptions(session.Options{
+		SharedConfigState: session.SharedConfigEnable,
+	}))
+
+	// Create an EC2 service client
+	ec2Svc := ec2.New(sess)
+
+	// Describe instances with the given private IP
+	input := &ec2.DescribeInstancesInput{
+		Filters: []*ec2.Filter{
+			{
+				Name:   aws.String("private-ip-address"),
+				Values: []*string{aws.String(privateIP)},
+			},
+		},
+	}
+
+	result, err := ec2Svc.DescribeInstances(input)
+	if err != nil {
+		return "", fmt.Errorf("failed to describe instances: %v", err)
+	}
+
+	// Check if any instances were found
+	if len(result.Reservations) == 0 || len(result.Reservations[0].Instances) == 0 {
+		return "", fmt.Errorf("no instances found with the provided private IP: %s", privateIP)
+	}
+
+	// Retrieve the instance ID
+	instanceID := aws.StringValue(result.Reservations[0].Instances[0].InstanceId)
+
+	return instanceID, nil
+}
+
+func ExtractPrivateIP(input string) (string, error) {
+	regexPattern := `ip-(\d{1,3}-\d{1,3}-\d{1,3}-\d{1,3})\.ec2\.internal`
+	regex := regexp.MustCompile(regexPattern)
+	matches := regex.FindStringSubmatch(input)
+
+	if len(matches) != 2 {
+		return "", fmt.Errorf("failed to extract private IP from input string")
+	}
+
+	privateIP := strings.ReplaceAll(matches[1], "-", ".")
+	return privateIP, nil
 }

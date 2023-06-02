@@ -194,7 +194,7 @@ func InitDrainNode(nodeDrain *model.NodeDrain, logger *logrus.Entry) error {
 				}
 			}
 		}
-		//logger.Warnf("Node %s not found, assuming already drained", nodeDrain.NodeName)
+		logger.Warnf("Node %s not found, assuming already drained", nodeDrain.NodeName)
 	} else if err != nil {
 		return errors.Wrapf(err, "Failed to get node %s", nodeDrain.NodeName)
 	} else {

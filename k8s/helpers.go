@@ -49,9 +49,7 @@ func WaitForNodeRunning(ctx context.Context, nodeName string, clientset *kuberne
 		}
 		if k8sErrors.IsNotFound(err) {
 			privateIP, _ := aws.ExtractPrivateIP(nodeName)
-			logger.Infof(privateIP)
 			instanceID, _ := aws.GetInstanceIDByPrivateIP(privateIP)
-			logger.Infof(instanceID)
 			node, err := clientset.CoreV1().Nodes().Get(ctx, instanceID, metav1.GetOptions{})
 			if err == nil {
 				for _, condition := range node.Status.Conditions {
@@ -62,8 +60,6 @@ func WaitForNodeRunning(ctx context.Context, nodeName string, clientset *kuberne
 					}
 				}
 			}
-			logger.Infof("I got here...")
-			logger.Infof(node.Name)
 			logger.Infof("Node %s not found, waiting...", node.Name)
 		} else if err != nil {
 			logger.WithError(err).Errorf("Error while waiting for node %s to become ready...", nodeName)

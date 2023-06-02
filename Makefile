@@ -2,7 +2,7 @@
 # See LICENSE.txt for license information.
 
 ## Docker Build Versions
-DOCKER_BUILD_IMAGE = golang:1.20
+DOCKER_BUILD_IMAGE = golang:1.19
 DOCKER_BASE_IMAGE = alpine:3.18
 
 # Variables
@@ -41,7 +41,7 @@ lint: $(GOLANGCILINT)
 	@echo Running golangci-lint
 	$(GOLANGCILINT) run
 
-.PHONY: vet
+.PHONY: govet
 govet:
 	@echo Running govet
 	$(GO) vet ./...

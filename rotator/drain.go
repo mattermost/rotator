@@ -173,9 +173,9 @@ func InitDrainNode(nodeDrain *model.NodeDrain, logger *logrus.Entry) error {
 
 					if nodeDrain.TerminateNode {
 						logger.Infof("Terminating node %s ", nodeDrain.NodeName)
-						err := awsTools.TerminateNodes([]string{nodeDrain.NodeName}, logger)
-						if err != nil {
-							return errors.Wrapf(err, "Failed to terminate node %s", nodeDrain.NodeName)
+						err2 := awsTools.TerminateNodes([]string{nodeDrain.NodeName}, logger)
+						if err2 != nil {
+							return errors.Wrapf(err2, "Failed to terminate node %s", nodeDrain.NodeName)
 						}
 						logger.Infof("Node %s terminated", nodeDrain.NodeName)
 
@@ -211,9 +211,9 @@ func InitDrainNode(nodeDrain *model.NodeDrain, logger *logrus.Entry) error {
 
 	if nodeDrain.TerminateNode {
 		logger.Infof("Terminating node %s ", nodeDrain.NodeName)
-		err := awsTools.TerminateNodes([]string{nodeDrain.NodeName}, logger)
-		if err != nil {
-			return errors.Wrapf(err, "Failed to terminate node %s", nodeDrain.NodeName)
+		err3 := awsTools.TerminateNodes([]string{nodeDrain.NodeName}, logger)
+		if err3 != nil {
+			return errors.Wrapf(err3, "Failed to terminate node %s", nodeDrain.NodeName)
 		}
 		logger.Infof("Node %s terminated", nodeDrain.NodeName)
 

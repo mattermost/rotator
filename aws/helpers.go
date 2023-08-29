@@ -104,7 +104,18 @@ func DetachNodes(decrement bool, nodesToDetach []string, autoscalingGroupName st
 func TerminateNodes(nodesToTerminate []string, logger *logrus.Entry) error {
 	logger.Infof("Terminating %d nodes", len(nodesToTerminate))
 	for _, node := range nodesToTerminate {
-		instanceID, err := GetInstanceID(node, logger)
+		var instanceID string
+		var err error
+		logger.Infof(node)
+		if matchesPatternPrivateDNS(node) {
+			instanceID, err = GetInstanceID(node, logger)
+		} else if matchesPatternID(node) {
+			instanceID = node
+		} else {
+			instanceID = ""
+			logger.Infof("Node %s is not a valid input", node)
+		}
+
 		if err != nil {
 			return errors.Wrapf(err, "Failed to detach and delete node %s", node)
 		}
@@ -271,4 +282,26 @@ func ExtractPrivateIP(input string) (string, error) {
 
 	privateIP := strings.ReplaceAll(matches[1], "-", ".")
 	return privateIP, nil
+}
+
+func matchesPatternPrivateDNS(input string) bool {
+	// Define the regular expression pattern
+	pattern := `^ip-\d{2,3}-\d{1,3}-\d{1,3}-\d{1,3}\.ec2\.internal$`
+
+	// Compile the regular expression
+	re := regexp.MustCompile(pattern)
+
+	// Use the MatchString method to check if the input matches the pattern
+	return re.MatchString(input)
+}
+
+func matchesPatternID(input string) bool {
+	// Define the regular expression pattern for ID pattern
+	pattern := `^i-[0-9a-f]{8,17}$`
+
+	// Compile the regular expression
+	re := regexp.MustCompile(pattern)
+
+	// Use the MatchString method to check if the input matches the pattern
+	return re.MatchString(input)
 }

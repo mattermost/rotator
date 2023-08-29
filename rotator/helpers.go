@@ -81,7 +81,18 @@ func (autoscalingGroup *AutoscalingGroup) DrainNodes(nodesToDrain []string, atte
 		logger.Infof("Draining node %s", nodeToDrain)
 
 		node, err := clientset.CoreV1().Nodes().Get(ctx, nodeToDrain, metav1.GetOptions{})
+		privateIP, _ := awsTools.ExtractPrivateIP(nodeToDrain)
+		instanceID, _ := awsTools.GetInstanceIDByPrivateIP(privateIP)
 		if k8sErrors.IsNotFound(err) {
+			node1, err1 := clientset.CoreV1().Nodes().Get(ctx, instanceID, metav1.GetOptions{})
+			if err1 == nil {
+				err = Drain(clientset, []*corev1.Node{node1}, drainOptions, waitBetweenPodEvictions, logger)
+				logger.Infof("Draining node using AWS instance ID %s", node1.Name)
+				for i := 1; i < attempts && err != nil; i++ {
+					logger.Warnf("Failed to drain node %q on attempt %d, retrying up to %d times", node1.Name, i, attempts)
+					err = Drain(clientset, []*corev1.Node{node1}, drainOptions, waitBetweenPodEvictions, logger)
+				}
+			}
 			logger.Warnf("Node %s not found, assuming already drained", nodeToDrain)
 		} else if err != nil {
 			return errors.Wrapf(err, "Failed to get node %s", nodeToDrain)

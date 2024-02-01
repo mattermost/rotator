@@ -70,7 +70,7 @@ jobs:
       - name: ci/scan-docker-security
         uses: aquasecurity/trivy-action@0.10.0
         with:
-          image-ref: "mattermost/mattermost-cloud-database-factory"
+          image-ref: "mattermost/node-rotator"
           format: "table"
           ignore-unfixed: true
           vuln-type: "os,library"

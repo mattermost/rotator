@@ -4,7 +4,7 @@
 
 # Rotator
 
-Rotator offers automation on autoscaling group recognition and flexility on options such as, how fast to rotate nodes, drain retries, waiting time between rotations and drains as well as mater/worker node separation.
+Rotator offers automation on autoscaling group recognition and flexility on options such as, how fast to rotate nodes, drain retries, waiting time between node rotations and drains as well as mater/worker node separation.
 
 ## How to use
 

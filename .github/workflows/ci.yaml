@@ -67,5 +67,14 @@ jobs:
         with:
           version: v0.7.1
 
+      - name: ci/scan-docker-security
+        uses: anchore/scan-action@7037fa011853d5a11690026fb85feee79f4c946c # v7.3.2
+        with:
+          image: "mattermost/node-rotator"
+          output-format: table
+          only-fixed: true
+          fail-build: false
+          severity-cutoff: critical
+
       - name: ci/docker-push-pr
         run: make push-image-pr

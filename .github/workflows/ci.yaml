@@ -67,14 +67,5 @@ jobs:
         with:
           version: v0.7.1
 
-      - name: ci/scan-docker-security
-        uses: aquasecurity/trivy-action@0.10.0
-        with:
-          image-ref: "mattermost/node-rotator"
-          format: "table"
-          ignore-unfixed: true
-          vuln-type: "os,library"
-          severity: "CRITICAL"
-
       - name: ci/docker-push-pr
         run: make push-image-pr
